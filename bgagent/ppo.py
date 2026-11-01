@@ -50,6 +50,10 @@ class TrainConfig:
     snapshot_every: int = 25  # iterations between policy snapshots (league + eval history)
     eval_every: int = 10  # iterations between evaluations against the scripted bots
     eval_games: int = 256
+    # Reward shaping: subtracted from the reward of every minion Move. Moves are free in the
+    # game, so an untrained policy shuffles minions dozens of times a turn; 0 disables it.
+    move_cost: float = 0.0
+    torch_threads: int = 0  # CPU threads for torch; 0 = torch's default
     n_games: int = 128
     threads: int = 8
     decisions_per_iter: int = 65536
@@ -128,6 +132,22 @@ class Collector:
 
     def stats_reset(self):
         self.placements, self.ep_lens, self.rejected, self.dropped = [], [], 0, 0
+        # behaviour at each learner End Turn, by turn: (warband size, Tavern Tier, gold left)
+        self.end_turn = {t: [] for t in (4, 6, 8, 10)}
+        self.n_actions, self.n_moves, self.n_end_turns = 0, 0, 0
+
+    def behaviour(self):
+        out = {}
+        for t, rows in self.end_turn.items():
+            if rows:
+                b, tier, gold = np.mean(rows, 0)
+                out.update({f"board_t{t}": round(float(b), 2), f"tier_t{t}": round(float(tier), 2),
+                            f"gold_left_t{t}": round(float(gold), 2)})
+        if self.n_end_turns:
+            out["actions_per_turn"] = round(self.n_actions / self.n_end_turns, 1)
+        if self.n_actions:
+            out["move_frac"] = round(self.n_moves / self.n_actions, 3)
+        return out
 
     def collect(self, model):
         cfg, env = self.cfg, self.env
@@ -143,11 +163,20 @@ class Collector:
                                o["action_mask"][lr_idx], self.device, self.amp)
                 actions[lr_idx] = a
                 for j, i in enumerate(lr_idx):
+                    f, aj = o["features"][i], int(a[j])
+                    is_move = aj >= L.A_MOVE
                     self.open[i].append([
-                        o["features"][i].astype(np.float16), o["cards"][i].astype(np.int16),
-                        np.packbits(o["action_mask"][i]), int(a[j]), float(lp[j]),
-                        float(v[j]), 0.0,
+                        f.astype(np.float16), o["cards"][i].astype(np.int16),
+                        np.packbits(o["action_mask"][i]), aj, float(lp[j]),
+                        float(v[j]), -cfg.move_cost if is_move else 0.0,
                     ])
+                    self.n_actions += 1
+                    self.n_moves += is_move
+                    if aj == L.A_END and f[1] == 0:  # End Turn outside hero select
+                        self.n_end_turns += 1
+                        t = int(round(f[0] * 20))
+                        if t in self.end_turn:  # global floats: turn/20, tier/6, gold/10, board/7
+                            self.end_turn[t].append((f[33] * 7, f[10] * 6, f[7] * 10))
             op_idx = np.nonzero(ready & ~self.learner)[0]
             if len(op_idx):
                 a, _, _ = act(self.opponent or model, o["features"][op_idx],
@@ -271,6 +300,8 @@ class Trainer:
         random.seed(cfg.seed)
         np.random.seed(cfg.seed)
         torch.manual_seed(cfg.seed)
+        if cfg.torch_threads:
+            torch.set_num_threads(cfg.torch_threads)
         self.device = pick_device(cfg.device)
         self.model = TavernNet(ModelConfig.preset(cfg.model)).to(self.device)
         self.opt = torch.optim.AdamW(self.model.parameters(), lr=cfg.lr, weight_decay=0.0,
@@ -383,6 +414,7 @@ class Trainer:
                 "decisions_per_s": round(len(batch["act"]) / max(t_roll, 1e-6), 1),
                 "lr": self.lr_at(self.it - 1),
                 **{k: round(v, 5) for k, v in up.items()},
+                **c.behaviour(),
                 "time": time.strftime("%Y-%m-%d %H:%M:%S"),
             }
             self.metrics.write(json.dumps(m) + "\n")
@@ -392,9 +424,10 @@ class Trainer:
                     if isinstance(v, (int, float)) and k != "iteration":
                         self.tb.add_scalar(k, v, self.it)
             fmt = lambda x: "-" if x is None else f"{x:.2f}"  # noqa: E731
-            print(f"it {self.it:4d} | place {fmt(m['avg_placement'])} top1 {fmt(m['top1'])} "
-                  f"top4 {fmt(m['top4'])} | {m['decisions']} dec {m['decisions_per_s']:.0f}/s "
-                  f"| kl {m['kl']:.4f} ent {m['ent']:.3f} vf {m['vf']:.3f} | "
+            print(f"it {self.it:4d} | place {fmt(m['avg_placement'])} top4 {fmt(m['top4'])} "
+                  f"| t8 board {fmt(m.get('board_t8'))} tier {fmt(m.get('tier_t8'))} "
+                  f"| acts/turn {m.get('actions_per_turn', '-')} moves {m.get('move_frac', '-')} "
+                  f"| kl {m['kl']:.4f} ent {m['ent']:.3f} | {m['decisions_per_s']:.0f} dec/s "
                   f"roll {t_roll:.0f}s upd {t_upd:.0f}s", flush=True)
             if cfg.eval_every and self.it % cfg.eval_every == 0:
                 self.model.eval()
