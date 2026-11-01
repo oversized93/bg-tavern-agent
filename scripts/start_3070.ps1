@@ -11,7 +11,10 @@
 # (or Claude Code session) ran this script, and survives it closing.
 param(
     [string]$Run = "runs\full-01",
-    [int]$Iterations = 4000  # ~45 s each on a 3070 plus evals: about 2.5 days
+    # Stop after this many; raise it to extend (start_3070.cmd -Iterations 1000). ~33 s each
+    # on a 3070 plus evals: 500 is about 5 hours.
+    [int]$Iterations = 500,
+    [int]$ScheduleIterations = 4000  # learning-rate schedule length, independent of stopping
 )
 $ErrorActionPreference = "Stop"
 $Repo = Split-Path -Parent $PSScriptRoot
@@ -29,7 +32,7 @@ if ($running) {
 
 $mbFile = Join-Path $Repo "runs\.micro_batch"
 $mb = if (Test-Path $mbFile) { (Get-Content $mbFile -Raw).Trim() } else { "512" }
-$set = "bench_dir=$Bench micro_batch=$mb device=cuda iterations=$Iterations"
+$set = "bench_dir=$Bench micro_batch=$mb device=cuda iterations=$Iterations lr_schedule_iters=$ScheduleIterations"
 $log = Join-Path $Repo "$Run.log"
 New-Item -ItemType Directory -Force (Join-Path $Repo "runs") | Out-Null
 
@@ -38,6 +41,8 @@ $inner = @"
 `$host.UI.RawUI.WindowTitle = 'bg-tavern-agent training ($Run)'
 Set-Location '$Repo'
 `$env:PYTHONUNBUFFERED = '1'
+`$env:PYTHONIOENCODING = 'utf-8'
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new(`$false)
 & '$Py' scripts\train.py --preset 3070 --run '$Run' --set $set 2>&1 | Tee-Object -FilePath '$log' -Append
 Write-Host ''
 Write-Host 'Training stopped. Run scripts\start_3070.cmd to resume.'

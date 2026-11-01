@@ -310,7 +310,11 @@ batch raises out-of-memory instead. Measured under the cap, one iteration of 16k
 update = 34 s, 3.7 GB VRAM, ~70 MB shared. The aborted run is `runs/full-01-aborted-sysmem`.
 
 **runs/full-01 started 2026-11-01 10:21** on the 3070: `--preset 3070` (full model 16.9M,
-4 learners + 4 bots, full rules, lr 3e-4 -> 1e-4), 4,000 iterations, TavernBench every 10.
+4 learners + 4 bots, full rules, lr 3e-4 -> 1e-4 over 4,000 iterations), TavernBench every 10.
+Capped at 500 iterations for a first review (`lr_schedule_iters=4000` keeps the schedule on the
+4,000 path, so extending later doesn't jump); stopped at the it-25 checkpoint and resumed.
+First evaluations (bots: 256 sampled games; TavernBench value / policy): it 10 7.73 ±0.10,
+0.30 / 0.30; it 20 5.95 ±0.24, 0.33 / 0.28. The tiny CPU model took 50+ iterations to reach 6.
 
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning

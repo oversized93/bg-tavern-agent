@@ -31,8 +31,9 @@ scripts\start_3070.cmd                                          # or double-clic
 7. Memory check: one full-size iteration at `micro_batch=512`, written to `runs\.micro_batch`.
 
 ## Running
-- `scripts\start_3070.cmd` starts or resumes `runs\full-01` (4,000 iterations, about 2 days)
-  in its own minimized window titled **bg-tavern-agent training**, logging to
+- `scripts\start_3070.cmd` starts or resumes `runs\full-01` (stops at 500 iterations, about 5 hours;
+  `start_3070.cmd -Iterations 1000` extends it, and the learning-rate schedule spans 4,000
+  either way, so extending doesn't make it jump) in its own minimized window titled **bg-tavern-agent training**, logging to
   `runs\full-01.log`. It refuses to start a second copy of a run that's already training.
 - Close that window to stop. Run `start_3070.cmd` again to resume from the last checkpoint
   (written every 5 iterations).

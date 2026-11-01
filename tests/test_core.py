@@ -265,6 +265,17 @@ def test_gae_with_terminal_reward():
     assert (b["place"] == 2).all() and b["mask"].shape == (3, L.N_ACTIONS)
 
 
+def test_lr_schedule_independent_of_stopping():
+    from bgagent.ppo import TrainConfig, Trainer
+
+    t = Trainer.__new__(Trainer)
+    t.cfg = TrainConfig(lr=3e-4, lr_final=1e-4, iterations=500, lr_schedule_iters=4000)
+    assert abs(t.lr_at(0) - 3e-4) < 1e-12 and abs(t.lr_at(3999) - 1e-4) < 1e-12
+    assert 2.7e-4 < t.lr_at(499) < 2.8e-4  # stopping at 500 leaves lr high, as on the 4000 path
+    t.cfg.lr_schedule_iters = 0
+    assert abs(t.lr_at(499) - 1e-4) < 1e-12  # default: the schedule spans `iterations`
+
+
 def test_combat_labels():
     from bgagent.ppo import combat_labels
 

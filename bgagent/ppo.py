@@ -64,6 +64,10 @@ class TrainConfig:
     iterations: int = 300
     lr: float = 1e-4
     lr_final: float = 3e-5
+    # Iterations over which lr falls linearly to lr_final; 0 = `iterations`. Set it to the
+    # planned length to stop early and extend later (raise `iterations`) without the schedule
+    # jumping.
+    lr_schedule_iters: int = 0
     gamma: float = 1.0
     lam: float = 0.995
     clip: float = 0.2
@@ -472,7 +476,8 @@ class Trainer:
     # ---- main loop
     def lr_at(self, it):
         cfg = self.cfg
-        frac = min(it / max(cfg.iterations - 1, 1), 1.0)
+        span = cfg.lr_schedule_iters or cfg.iterations
+        frac = min(it / max(span - 1, 1), 1.0)
         return cfg.lr + (cfg.lr_final - cfg.lr) * frac
 
     def run(self):
