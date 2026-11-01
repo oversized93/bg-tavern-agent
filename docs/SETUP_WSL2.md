@@ -3,6 +3,21 @@
 TavernGym's own CI only runs on Ubuntu, and WSL2 is the easiest way to give PyTorch the GPU,
 so everything runs inside WSL2.
 
+## Fast path (three commands)
+1. Windows, PowerShell **as administrator**: `wsl --install -d Ubuntu-24.04`, reboot, open
+   Ubuntu from the Start menu and pick a username and password. (Skip if `wsl -l -v` already
+   lists an Ubuntu.)
+2. In Ubuntu:
+   ```bash
+   git clone https://github.com/oversized93/bg-tavern-agent.git ~/bg-tavern-agent
+   bash ~/bg-tavern-agent/scripts/setup_wsl.sh
+   ```
+   It installs everything below, runs the checks, and finds the largest `micro_batch` that
+   fits in the 3070's memory. Safe to rerun.
+3. `bash ~/bg-tavern-agent/scripts/start_3070.sh` starts the run in tmux (rerun it to resume).
+
+Then see section 4 (keep the PC awake). The sections below are the same steps by hand.
+
 ## 1. WSL2 and the GPU
 1. In an administrator PowerShell: `wsl --install -d Ubuntu-24.04`, then reboot.
 2. Keep the NVIDIA driver on **Windows** up to date (Game Ready or Studio). WSL2 uses it
