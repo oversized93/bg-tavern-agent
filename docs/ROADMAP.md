@@ -11,13 +11,14 @@ probabilities, while Cranny plays. Never automate play.
 - `Advisor`: ranked recommendations for any saved game state.
 
 ## Phase 2: train on the 3070
-1. `--preset small` (simple rules, ~2.9M params, pure self-play): hours. Proves learning
-   end to end; tune lr / entropy here because it's cheap.
-2. `--preset 3070` (full rules, ~16.9M params, league): the multi-day run. Restarting a
-   stage from a stage-1 checkpoint needs matching model size, so stage 2 starts fresh unless
-   stage 1 used `model=full`.
-3. Track `eval vs bots` (random = 7.95, scripted bot = 4.50). Beating 4.5 clearly is the
-   first milestone; the paper's agents were then trained against stronger opponents.
+1. `--preset small` (full rules, ~2.9M params, 4 learners + 4 bots): hours. Proves learning
+   end to end; tune lr / entropy here because it's cheap. (A simplified-rules first stage
+   did worse in the CPU tests: see NOTES.md.)
+2. `--preset 3070` (full rules, ~16.9M params, 4 learners + 4 bots): the multi-day run.
+3. Track `eval vs bots` (random = 7.95, scripted bot = 4.50). The tiny CPU model already
+   passes 4.5 (NOTES.md), so the bots stop being a useful yardstick soon. Next yardsticks:
+   past snapshots of our own policy (league) and TavernBench (phase 3). The bots are weak:
+   TavernGym describes them as making games "varied, not strong".
 
 ## Phase 3: measure against the paper (TavernBench)
 Adapter from TavernBench play tasks (`tavernbench/data/eval`, saved states via

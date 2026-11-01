@@ -23,17 +23,7 @@ from . import layout as L
 from .evaluation import evaluate
 from .filters import ActionFilter
 from .model import ModelConfig, TavernNet, param_count
-
-# Rule sets for the curriculum (the paper starts on simplified rules). Keys are TavernGym
-# RulesConfig fields; unknown keys raise inside TavernGym.
-RULES = {
-    "full": {},
-    "simple": {  # no trinkets, no Dark Gifts
-        "lesser_trinket_turn": 99,
-        "greater_trinket_turn": 99,
-        "dark_gift_unlock_turn": 99,
-    },
-}
+from .rules import RULES, rules_config  # noqa: F401  (RULES re-exported for scripts)
 
 
 @dataclass
@@ -61,6 +51,7 @@ class TrainConfig:
     factored: bool = True  # factored action head (see ModelConfig.factored)
     move_cap: int = 6  # action filter (see filters.py): minion moves allowed per turn, 0 = off
     no_refreeze: bool = True  # action filter: no Freeze while the shop is already frozen
+    cancel_cap: int = 2  # action filter: Cancels allowed per turn (Play/Cancel loops), 0 = off
     n_games: int = 128
     threads: int = 8
     decisions_per_iter: int = 65536
@@ -91,9 +82,11 @@ class TrainConfig:
                                lr_final=3e-4, checkpoint_every=1, eval_every=3, eval_games=16)
         # Defaults from the CPU tests (NOTES.md, 2026-10-31): the factored head plus "mixed"
         # opponents (4 learner seats, 4 scripted bots) beat every other setup by a wide
-        # margin. Learning rates for the bigger models are extrapolated, not yet tested.
-        if name == "small":  # stage 1: fast iteration on simplified rules (hours)
-            return TrainConfig(model="small", rules="simple", opponents="mixed", n_games=64,
+        # margin, and training on the full rules beat the simplified-rules curriculum
+        # (3.78 vs 6.90 against the bots after 100 iterations). Learning rates for the
+        # bigger models are extrapolated, not yet tested.
+        if name == "small":  # fast iteration (hours)
+            return TrainConfig(model="small", rules="full", opponents="mixed", n_games=64,
                                learner_seats=(0, 1, 2, 3), decisions_per_iter=32768,
                                minibatch=4096, micro_batch=2048, lr=5e-4, lr_final=2e-4)
         if name == "3070":  # the multi-day run on an 8 GB card
@@ -132,7 +125,7 @@ class Collector:
         controlled = {"league": tuple(range(8)), "mixed": tuple(cfg.learner_seats),
                       "bots": (0,)}[cfg.opponents]
         self.env = taverngym.BatchEnv(cfg.n_games, seed=cfg.seed, controlled=controlled,
-                                      config=RULES[cfg.rules] or None, threads=cfg.threads)
+                                      config=rules_config(cfg.rules), threads=cfg.threads)
         n = self.env.n_slots
         k = len(controlled)
         seats = np.array([controlled[i % k] for i in range(n)])
@@ -325,6 +318,7 @@ class Trainer:
         mcfg.factored = cfg.factored
         mcfg.move_cap = cfg.move_cap
         mcfg.no_refreeze = cfg.no_refreeze
+        mcfg.cancel_cap = cfg.cancel_cap
         latest = self.run_dir / "latest.pt"
         if latest.exists():  # resume with the architecture the run was started with
             from .policy import model_config_from
@@ -458,11 +452,12 @@ class Trainer:
                   f"roll {t_roll:.0f}s upd {t_upd:.0f}s", flush=True)
             if cfg.eval_every and self.it % cfg.eval_every == 0:
                 self.model.eval()
-                # Sampled, not greedy: an early greedy policy can repeat a no-op such as a
-                # minion move until the per-turn action cap, which makes evaluation crawl.
+                # Always on the full rules (the game the advice is for), whatever the training
+                # rules. Sampled, not greedy: an early greedy policy can repeat a no-op such as
+                # a minion move until the per-turn action cap, which makes evaluation crawl.
                 # scripts/evaluate.py measures the greedy policy on snapshots.
                 r = evaluate(self.model, cfg.eval_games, n_parallel=min(64, cfg.eval_games),
-                             threads=cfg.threads, sample=True, device=self.device)
+                             threads=cfg.threads, sample=True, device=self.device, rules="full")
                 ev = {"iteration": self.it, **{f"eval_{k}": v for k, v in r.items()}}
                 self.metrics.write(json.dumps(ev) + "\n")
                 self.metrics.flush()

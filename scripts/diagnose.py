@@ -21,11 +21,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from bgagent.filters import ActionFilter  # noqa: E402
 from bgagent.policy import load_policy  # noqa: E402
+from bgagent.rules import RULES, rules_config  # noqa: E402
 
 
 @torch.inference_mode()
-def diagnose(policy, games, seed=20_000_003, sample=True):
-    env = taverngym.BatchEnv(min(games, 64), seed=seed, controlled=(0,))
+def diagnose(policy, games, seed=20_000_003, sample=True, rules="full"):
+    env = taverngym.BatchEnv(min(games, 64), seed=seed, controlled=(0,),
+                             config=rules_config(rules))
     rng = np.random.default_rng(seed)
     by_turn = defaultdict(lambda: defaultdict(list))
     actions_per_turn, finished = [], 0
@@ -72,11 +74,12 @@ def main():
     ap.add_argument("policies", nargs="+", help="policy files, or 'random'")
     ap.add_argument("--games", type=int, default=64)
     ap.add_argument("--greedy", action="store_true")
+    ap.add_argument("--rules", default="full", choices=sorted(RULES))
     args = ap.parse_args()
     for p in args.policies:
         model = None if p == "random" else load_policy(p)[0]
-        print(json.dumps({"policy": p, **diagnose(model, args.games, sample=not args.greedy)}),
-              flush=True)
+        r = diagnose(model, args.games, sample=not args.greedy, rules=args.rules)
+        print(json.dumps({"policy": p, "rules": args.rules, **r}), flush=True)
 
 
 if __name__ == "__main__":

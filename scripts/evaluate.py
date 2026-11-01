@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from bgagent.evaluation import evaluate  # noqa: E402
 from bgagent.policy import load_policy  # noqa: E402
+from bgagent.rules import RULES  # noqa: E402
 
 
 def main():
@@ -34,6 +35,9 @@ def main():
     ap.add_argument("--move-cap", type=int, help="override the policy's move cap (0 = off)")
     ap.add_argument("--no-refreeze", type=int, choices=[0, 1],
                     help="override the policy's no-refreeze rule")
+    ap.add_argument("--cancel-cap", type=int, help="override the policy's cancel cap (0 = off)")
+    ap.add_argument("--rules", default="full", choices=sorted(RULES),
+                    help="rule set from bgagent/rules.py (default: full, the real game)")
     args = ap.parse_args()
 
     if args.policy == "random":
@@ -50,10 +54,15 @@ def main():
                 model.cfg.move_cap = args.move_cap
             if args.no_refreeze is not None:
                 model.cfg.no_refreeze = bool(args.no_refreeze)
-            rules = {"move_cap": model.cfg.move_cap, "no_refreeze": model.cfg.no_refreeze}
-        r = evaluate(model, args.games, args.parallel, args.threads, args.sample, args.device)
+            if args.cancel_cap is not None:
+                model.cfg.cancel_cap = args.cancel_cap
+            rules = {"move_cap": model.cfg.move_cap, "no_refreeze": model.cfg.no_refreeze,
+                     "cancel_cap": model.cfg.cancel_cap}
+        r = evaluate(model, args.games, args.parallel, args.threads, args.sample, args.device,
+                     rules=args.rules)
         mode = "sampled" if args.sample else "greedy"
-        print(json.dumps({"policy": name, "mode": mode, **rules, **r}), flush=True)
+        print(json.dumps({"policy": name, "mode": mode, "rules": args.rules, **rules, **r}),
+              flush=True)
 
 
 if __name__ == "__main__":

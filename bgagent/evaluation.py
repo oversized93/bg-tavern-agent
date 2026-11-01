@@ -5,20 +5,22 @@ import taverngym
 import torch
 
 from .filters import ActionFilter
+from .rules import rules_config
 
 EVAL_SEED = 10_000_019  # fixed and far from training seeds, so checkpoints are comparable
 
 
 @torch.inference_mode()
 def evaluate(policy, games, n_parallel=64, threads=4, sample=False, device="cpu",
-             seed=EVAL_SEED):
+             seed=EVAL_SEED, rules="full"):
     """Average placement (1 best, 8 worst) with a 95% interval, top-1 and top-4 rates.
 
-    `policy=None` plays uniformly random legal actions (the floor: about 7.95)."""
+    `policy=None` plays uniformly random legal actions (the floor: about 7.95). `rules` names
+    a rule set in bgagent/rules.py; "full" is the real game with a per-turn action cap."""
     device = torch.device(device)
     amp = device.type == "cuda"
     env = taverngym.BatchEnv(min(n_parallel, games), seed=seed, controlled=(0,),
-                             threads=threads)
+                             config=rules_config(rules), threads=threads)
     rng = np.random.default_rng(seed)
     places, started = [], env.n_slots
     active = np.ones(env.n_slots, bool)

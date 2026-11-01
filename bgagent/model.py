@@ -44,6 +44,7 @@ class ModelConfig:
     # Action filter rules the policy is trained and used with (see filters.py).
     move_cap: int = 6
     no_refreeze: bool = True
+    cancel_cap: int = 2
 
     @staticmethod
     def preset(name: str) -> "ModelConfig":

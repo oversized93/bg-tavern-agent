@@ -138,6 +138,57 @@ def test_action_filter_rules():
     assert filt.apply(f1, only_moves, np.array([0])).any()  # never empties the mask
 
 
+def test_cancel_cap():
+    from bgagent.filters import F_TURN, ActionFilter
+
+    feats = np.zeros((1, L.OBS_FLOATS), np.float32)
+    feats[:, F_TURN] = 0.25
+    mask = np.zeros((1, L.N_ACTIONS), bool)
+    mask[0, [L.A_CANCEL, L.A_CHOOSE]] = True
+    filt, idx = ActionFilter(1, cancel_cap=2), np.array([0])
+    for _ in range(2):
+        assert filt.apply(feats, mask, idx)[0, L.A_CANCEL]
+        filt.record(idx, [L.A_CANCEL])
+    m = filt.apply(feats, mask, idx)
+    assert not m[0, L.A_CANCEL] and m[0, L.A_CHOOSE]  # must pick a target now
+    feats[:, F_TURN] = 0.30
+    assert filt.apply(feats, mask, idx)[0, L.A_CANCEL]  # new turn
+
+
+def _longest_turn(rules, steps=3000):
+    """Seat 0 moves minions whenever it can, else takes any action but End Turn: the loop a
+    move-loving policy falls into. Returns the most actions it took in one turn."""
+    from bgagent.rules import rules_config
+
+    env = taverngym.BatchEnv(1, seed=4, controlled=(0,), config=rules_config(rules))
+    rng = np.random.default_rng(0)
+    o, turn, n, longest = env.observe(), -1, 0, 0
+    for _ in range(steps):
+        if o["ready"][0]:
+            t = round(float(o["features"][0, 0]) * 20)
+            n, turn = (0, t) if t != turn else (n, turn)
+            legal = np.nonzero(o["action_mask"][0])[0]
+            moves, other = legal[legal >= L.A_MOVE], legal[legal != L.A_END]
+            a = rng.choice(moves) if len(moves) else rng.choice(other) if len(other) else L.A_END
+            n += 1
+            longest = max(longest, n)
+        else:
+            a = 0
+        _, done, _ = env.step([a])
+        if done[0] or longest > 200:
+            break
+        o = env.observe()
+    return longest
+
+
+def test_action_cap_ends_move_loops():
+    """TavernGym has no per-turn limit by default; our rule sets add one."""
+    from bgagent.rules import ACTION_CAP
+
+    assert _longest_turn("uncapped") > 200
+    assert _longest_turn("full") <= ACTION_CAP + 1  # the cap, then End Turn
+
+
 def test_action_names_match_pointer_layout():
     assert taverngym.action_name(L.A_PLAY + 3 * L.N_POS + 2).startswith("Play { hand: 3, pos: 2")
     assert taverngym.action_name(L.A_MAGNETIZE + 4 * L.N_BOARD + 5) == "Magnetize { hand: 4, board: 5 }"
