@@ -1,0 +1,40 @@
+# Research log
+
+Newest entries at the bottom. Every claim gets a number and the command that produced it.
+
+## 2026-10-31: pipeline built and checked
+
+**TavernGym build.** AutoTavern commit `fb61201a` builds with Rust 1.97 using
+`--ignore-rust-version` (it pins 1.98.1). On the 3070 machine, install 1.98.1 as the setup doc
+says. Bot-only games: ~150 games/s on one busy CPU core here (the paper reports 190-280).
+
+**Observation layout.** obs.rs writes floats as: global 53, quests 6, pending 9, board 7x31,
+hand 10x40, shop 8x40, choices 16x40, opponents 7x9, opponents' last-seen boards 49x31 = 3,227.
+Cards: hero, 2 powers, deity, pending source, quests 9, secrets 5, board 7, hand 10, shop 8,
+choices 16, trinkets 8, opponent heroes 7, opponent boards 49 = 124. Checked on 9,600
+observations from random play: board/hand slot counts read through these offsets match the
+engine's own counters, and buy actions are never legal on empty shop slots. 0 mismatches.
+
+**Model sizes** (`ModelConfig.preset`): tiny 0.40M, small 2.85M, medium 6.29M,
+full 16.86M parameters. The paper's sizes were 3.5M / 8M / 18M; ours are close enough.
+
+**Baselines vs seven scripted bots.** Random legal play: 7.94 avg placement over 200 games
+(paper: 7.97). A scripted bot in a seat is 4.50 by symmetry.
+
+**Finding: training from scratch against the bots gives no signal.** A fresh policy placed
+7.95-7.99 for 8 straight iterations (8k decisions each) and the value loss collapsed to
+0.001: it finishes 8th nearly every game, the reward is a constant -1, and the advantages
+are noise. Fix: start in league / self-play, where opponents are as weak as the learner and
+placement spreads over 1-8. The bots become an evaluation yardstick (every `eval_every`
+iterations). The paper also began on simplified rules; `rules=simple` turns off trinkets and
+Dark Gifts.
+
+**Evaluation detail.** An early greedy policy can repeat a no-op (moving a minion back and
+forth) until the 200-actions-per-turn cap, which makes greedy evaluation crawl. Training-time
+evaluation samples from the policy; `scripts/evaluate.py` is greedy by default.
+
+## Open questions
+- Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
+  stages; early stages need far higher. Tune on the small preset first.
+- Whether self-play alone reaches 4.5 vs bots, or needs bot/library opponents mixed in.
+- Reward shaping: none so far (pure placement reward), as in TavernGym.
