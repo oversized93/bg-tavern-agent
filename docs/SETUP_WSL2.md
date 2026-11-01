@@ -57,8 +57,8 @@ python scripts/tavernbench.py runs/smoke/latest.pt --bench ~/AutoTavern/tavernbe
 - **Run in tmux** so closing the terminal doesn't kill training:
   ```bash
   tmux new -s train
-  source .venv/bin/activate
-  python scripts/train.py --preset small --run runs/stage1-small
+  cd ~/bg-tavern-agent && source .venv/bin/activate
+  python scripts/train.py --preset 3070 --run runs/full-01 --set bench_dir=~/AutoTavern/tavernbench
   # detach: Ctrl-b then d      reattach later: tmux attach -t train
   ```
 - **If anything stops it** (reboot, crash), rerun the same command: it resumes from
