@@ -257,6 +257,29 @@ is about ±0.06.
 - Hero (D1) and trinket (D2) labels are top human players' average placements. Even
   TavernAgent gets 0.25 / 0.12 there.
 
+## 2026-11-01: next-combat auxiliary head (h1) - no help
+
+h1 = f5's recipe (tiny model, full rules, 4 learners + 4 bots, filter + caps, lr 1e-3, seed 0,
+150 iterations) plus a head predicting the combat right after each turn (lost it, damage taken),
+`combat_coef=0.5`. Labels come from the seat's own Health + Armor across turns. The head
+learns (its loss falls from 0.78 to 0.61), but:
+
+| it | 10 | 30 | 50 | 70 | 90 | 110 | 130 | 150 |
+|---|---|---|---|---|---|---|---|---|
+| f5 vs bots | 7.09 | 5.91 | 4.84 | 4.84 | 4.34 | 4.08 | 3.91 | 4.08 |
+| h1 vs bots | 7.06 | 6.13 | 5.20 | 4.49 | 4.20 | 4.13 | 3.73 | 4.13 |
+| f5 TavernBench value / policy | 0.30 / 0.29 | 0.40 / 0.29 | 0.31 / 0.26 | 0.35 / 0.25 | 0.32 / 0.25 | 0.36 / 0.25 | 0.36 / 0.32 | 0.35 / 0.29 |
+| h1 TavernBench value / policy | 0.32 / 0.19 | 0.36 / 0.24 | 0.29 / 0.26 | 0.27 / 0.22 | 0.27 / 0.18 | 0.29 / 0.17 | 0.32 / 0.22 | 0.35 / 0.25 |
+
+Mean over it 80-150 (8 evaluations): TavernBench value 0.35 (f5) vs 0.31 (h1), policy 0.28 vs
+0.20 (chance 0.24). Against the bots they're the same within noise. The head is not in the
+3070 recipe (`combat_coef` stays 0). f5's TavernBench curve was scored afterwards on its
+snapshots (`runs/f5-caps/bench_curve.jsonl`); it is flat from it 20 on while its placement vs
+the bots goes from 6.27 to 4.08.
+
+h2 (the small 2.9M model, same recipe, lr 5e-4) was killed for memory at iteration 8 while h1
+ran beside it (~3.4 GB; the container has 8 GB); resumed alone with micro_batch 512.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
