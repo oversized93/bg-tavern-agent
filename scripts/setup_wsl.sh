@@ -26,9 +26,15 @@ if ! nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,nohead
   exit 1
 fi
 
-step "2/7 Ubuntu packages (asks for your Ubuntu password)"
-sudo apt-get update -y
-sudo apt-get install -y build-essential git curl python3-venv python3-dev tmux
+step "2/7 Ubuntu packages"
+PKGS="build-essential git curl python3-venv python3-dev tmux"
+if dpkg -s $PKGS >/dev/null 2>&1; then
+  echo "already installed"
+else
+  echo "(asks for your Ubuntu password)"
+  sudo apt-get update -y
+  sudo apt-get install -y $PKGS
+fi
 
 step "3/7 Rust (builds the simulator)"
 if [ ! -x "$HOME/.cargo/bin/rustup" ]; then
