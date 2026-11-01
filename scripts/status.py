@@ -33,6 +33,11 @@ def main():
         print(f"training placement (last {len(pl)}): {sum(pl) / len(pl):.2f}  "
               f"kl {last['kl']:.4f}  entropy {last['ent']:.2f}  early-stops "
               f"{sum(r['early_stop'] for r in recent):.0f}/{len(recent)}")
+    if "tier_t8" in last or "actions_per_turn" in last:
+        print(f"behaviour at turn 8 End Turn: board {last.get('board_t8', '-')}  "
+              f"tier {last.get('tier_t8', '-')}  gold left {last.get('gold_left_t8', '-')}  "
+              f"| {last.get('actions_per_turn', '-')} actions/turn, "
+              f"{last.get('move_frac', '-')} of them moves")
     if evals:
         print("vs scripted bots (lower is better; random = 7.95, bot = 4.50):")
         for r in evals[-8:]:
