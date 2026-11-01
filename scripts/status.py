@@ -22,6 +22,9 @@ def main():
     if not train:
         print("no iterations logged yet")
         return
+    # A resume from a checkpoint repeats the iterations after it: keep the newest of each.
+    latest = lambda rs: list({r["iteration"]: r for r in rs}.values())  # noqa: E731
+    train, evals, bench = latest(train), latest(evals), latest(bench)
     last = train[-1]
     it, total = last["iteration"], cfg["iterations"]
     recent = train[-10:]
@@ -34,6 +37,10 @@ def main():
         print(f"training placement (last {len(pl)}): {sum(pl) / len(pl):.2f}  "
               f"kl {last['kl']:.4f}  entropy {last['ent']:.2f}  early-stops "
               f"{sum(r['early_stop'] for r in recent):.0f}/{len(recent)}")
+    skipped = sum(r.get("skipped", 0) for r in train)
+    if skipped:
+        print(f"WARNING: {skipped} update steps skipped for non-finite gradients "
+              f"(last at iteration {max(r['iteration'] for r in train if r.get('skipped'))})")
     if "tier_t8" in last or "actions_per_turn" in last:
         print(f"behaviour at turn 8 End Turn: board {last.get('board_t8', '-')}  "
               f"tier {last.get('tier_t8', '-')}  gold left {last.get('gold_left_t8', '-')}  "

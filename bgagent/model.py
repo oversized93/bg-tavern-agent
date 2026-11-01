@@ -17,6 +17,11 @@ import torch.nn.functional as Fn
 
 from . import layout as L
 
+# TavernGym encodes stats linearly (attack / 10 and so on) with no ceiling, and rollouts are
+# stored as float16, whose largest value is 65504. Inputs are clamped to that, so a minion past
+# 655,040 attack is seen the same way when acting and when training (and never becomes inf).
+FEATURE_MAX = 65504.0
+
 
 # Action types for the factored head: contiguous ranges of the 245 actions.
 ACTION_GROUPS = [
@@ -106,6 +111,7 @@ class TavernNet(nn.Module):
 
     def tokens(self, feats: torch.Tensor, cards: torch.Tensor) -> torch.Tensor:
         B = feats.shape[0]
+        feats = feats.clamp(-FEATURE_MAX, FEATURE_MAX)  # same bound as rollout storage
         cards = cards.long()
         emb = self.card(cards)  # [B, 124, d]
 

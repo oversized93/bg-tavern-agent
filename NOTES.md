@@ -348,7 +348,8 @@ First evaluations (bots: 256 sampled games; TavernBench value / policy): it 10 7
   (±0.2 each). Passed a bot's 4.50 before it 60 (f4 needed 70 CPU iterations); flattening
   near 3.1-3.5 since it 80. Sampled, so not comparable to g1's 2.94 greedy.
 - TavernBench value 0.30 -> 0.40 (it 130, its best), policy flat at 0.28-0.35 the whole way.
-  Positioning is the one category clearly rising: 0.28 -> 0.45 (both pickers). Policy
+  Positioning is the one category clearly rising: 0.28 -> 0.45 (one result: arrangement
+  is scored by the value head in both modes). Policy
   ordering fell 0.42-0.50 (it 30-50) -> 0.17-0.23 (it 100-130) while value ordering stayed
   0.45-0.65: the policy's card order is drifting away from what its own value head prefers.
   Economy and strategy stay near 0-0.25 (few tasks each, so noisy).
@@ -358,6 +359,20 @@ First evaluations (bots: 256 sampled games; TavernBench value / policy): it 10 7
   at low tier is what beats these bots. Not a bug, but real lobbies punish it; watch whether
   self-play pulls it back up by it 500, and if not, try hybrid opponents.
 - Health: kl 0.005-0.009, entropy 1.45-1.50, 0 early stops, 4.5 GB VRAM, 66 C, 34 s/iter.
+
+**full-01 crashed at it 268 (13:16): one huge minion made every weight NaN.** The log shows
+`ppo.py:198: RuntimeWarning: overflow encountered in cast`, then `kl nan ent nan` for it 268,
+then a CUDA assert in `torch.multinomial` on the next rollout. TavernGym encodes stats
+linearly (attack / 10, health / 10, no ceiling) and rollouts store observations as float16
+(max 65504), so a minion past 655,040 attack or health was stored as inf. The network saw the
+real value while acting (float32) but inf while training, the loss went NaN, and one optimizer
+step made the whole model NaN. Scale of the tail: in 256 training-like games with the it-250
+policy, the largest stat was ~8,400 (feature 837); this took ~17M decisions to hit once.
+Fix: the model clamps its input to ±65504 and rollouts clip to the same before storing (so
+acting and training see the same value, and nothing below 65504 changes); a second guard skips
+any optimizer step whose gradient norm isn't finite, logs `skipped`, and status.py warns.
+latest.pt (it 265) was clean (no non-finite tensors) and the run resumed from it at 15:4x;
+it 266-268 were rerun (status.py keeps the newest row per iteration).
 
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning

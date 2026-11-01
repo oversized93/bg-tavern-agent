@@ -22,7 +22,7 @@ import torch.nn.functional as Fn
 from . import layout as L
 from .evaluation import evaluate
 from .filters import ActionFilter
-from .model import ModelConfig, TavernNet, param_count
+from .model import FEATURE_MAX, ModelConfig, TavernNet, param_count
 from .rules import RULES, rules_config  # noqa: F401  (RULES re-exported for scripts)
 
 
@@ -120,6 +120,12 @@ def pick_device(name: str) -> torch.device:
     return torch.device(name)
 
 
+def store_features(feats):
+    """Observation floats as stored in a rollout: float16, clipped to the range the model
+    clamps its input to, so a huge stat can't overflow to inf."""
+    return np.clip(feats, -FEATURE_MAX, FEATURE_MAX).astype(np.float16)
+
+
 @torch.inference_mode()
 def act(model, feats, cards, mask, device, amp):
     f = torch.from_numpy(feats).to(device, non_blocking=True)
@@ -191,11 +197,12 @@ class Collector:
                                self.device, self.amp)
                 self.filter.record(lr_idx, a)
                 actions[lr_idx] = a
+                stored = store_features(o["features"][lr_idx])
                 for j, i in enumerate(lr_idx):
                     f, aj = o["features"][i], int(a[j])
                     is_move = aj >= L.A_MOVE
                     self.open[i].append([
-                        f.astype(np.float16), o["cards"][i].astype(np.int16),
+                        stored[j].copy(), o["cards"][i].astype(np.int16),  # copy: no view
                         np.packbits(lm[j]), aj, float(lp[j]),
                         float(v[j]), -cfg.move_cost if is_move else 0.0,
                     ])
@@ -306,7 +313,7 @@ def ppo_update(model, opt, batch, cfg: TrainConfig, device):
     stats = {"pg": 0.0, "vf": 0.0, "ent": 0.0, "aux": 0.0, "combat": 0.0, "kl": 0.0,
              "clipfrac": 0.0}
     use_combat = cfg.combat_coef > 0
-    steps, stop = 0, False
+    steps, skipped, stop = 0, 0, False
     for _ in range(cfg.epochs):
         perm = torch.randperm(n)
         for s in range(0, n, cfg.minibatch):
@@ -351,7 +358,11 @@ def ppo_update(model, opt, batch, cfg: TrainConfig, device):
                 for k, val in (("pg", pg), ("vf", vf), ("ent", ent), ("aux", aux),
                                ("combat", combat)):
                     mb_stats[k] += val.item() * w
-            torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.max_grad_norm)
+            norm = torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.max_grad_norm)
+            if not torch.isfinite(norm):  # one bad minibatch must not make every weight NaN
+                opt.zero_grad(set_to_none=True)
+                skipped += 1
+                continue
             opt.step()
             steps += 1
             for k in stats:
@@ -362,7 +373,7 @@ def ppo_update(model, opt, batch, cfg: TrainConfig, device):
         if stop:
             break
     out = {k: v / max(steps, 1) for k, v in stats.items()}
-    out.update(updates=steps, early_stop=float(stop))
+    out.update(updates=steps, early_stop=float(stop), skipped=skipped)
     return out
 
 
@@ -528,7 +539,9 @@ class Trainer:
                   f"| t8 board {fmt(m.get('board_t8'))} tier {fmt(m.get('tier_t8'))} "
                   f"| acts/turn {m.get('actions_per_turn', '-')} moves {m.get('move_frac', '-')} "
                   f"| kl {m['kl']:.4f} ent {m['ent']:.3f} | {m['decisions_per_s']:.0f} dec/s "
-                  f"roll {t_roll:.0f}s upd {t_upd:.0f}s", flush=True)
+                  f"roll {t_roll:.0f}s upd {t_upd:.0f}s"
+                  + (f" | skipped {up['skipped']} non-finite steps" if up["skipped"] else ""),
+                  flush=True)
             if cfg.eval_every and self.it % cfg.eval_every == 0:
                 self.model.eval()
                 # Always on the full rules (the game the advice is for), whatever the training

@@ -307,6 +307,49 @@ def test_combat_head_trains():
     assert np.isfinite(stats["combat"]) and stats["updates"] >= 1
 
 
+def test_huge_stats_stay_finite_and_match():
+    # full-01 died at it 268: a minion past 655,040 attack or health (TavernGym encodes stat/10,
+    # unbounded) overflowed the float16 rollout storage to inf, and one update made every
+    # weight NaN. Storage must stay finite, and the network must see the stored value and the
+    # raw one alike, so rollout and update agree.
+    from bgagent.model import FEATURE_MAX
+    from bgagent.ppo import store_features
+
+    o = next(iter(random_observations(1)))
+    f = o["features"][:1].copy()
+    atk = L.F["board"][0] + 1  # first warband minion's attack / 10
+    f[0, atk] = 1e6
+    stored = store_features(f)
+    assert stored.dtype == np.float16 and np.isfinite(stored).all()
+    assert stored[0, atk] == np.float16(FEATURE_MAX)
+    net = TavernNet(ModelConfig.preset("tiny")).eval()
+    clipped = f.copy()
+    clipped[0, atk] = FEATURE_MAX
+    c = torch.from_numpy(o["cards"][:1])
+    with torch.no_grad():
+        raw_out, clip_out = net(torch.from_numpy(f), c), net(torch.from_numpy(clipped), c)
+    assert torch.equal(raw_out[0], clip_out[0]) and torch.equal(raw_out[1], clip_out[1])
+
+
+@pytest.mark.filterwarnings("ignore:invalid value encountered in cast")
+def test_update_skips_nonfinite_step():
+    # Second guard: whatever the source, a NaN loss must not reach the weights.
+    from bgagent.ppo import TrainConfig, build_batch, ppo_update
+
+    cfg = TrainConfig(model="tiny", minibatch=16, micro_batch=8)
+    net = TavernNet(ModelConfig(d=64, layers=2, heads=4))
+    o = next(iter(random_observations(1)))
+    mk = np.packbits(o["action_mask"][0])
+    bad = o["features"][0].astype(np.float16)
+    bad[0] = np.nan
+    traj = [[bad, o["cards"][0].astype(np.int16), mk, 0, -1.0, 0.0, 0.0] for _ in range(16)]
+    b = build_batch([(traj, 4)], 1.0, 0.995)
+    opt = torch.optim.AdamW(net.parameters(), lr=1e-3)
+    stats = ppo_update(net, opt, b, cfg, torch.device("cpu"))
+    assert stats["skipped"] >= 1
+    assert all(torch.isfinite(p).all() for p in net.parameters())
+
+
 def test_advisor_on_saved_state(tmp_path):
     g = taverngym.Game(seed=5)
     while not (g.turn >= 3 and g.needs_action(0)):
