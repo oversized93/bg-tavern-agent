@@ -51,6 +51,15 @@ left unspent; those are the next things to watch.
 The same run kept going to iteration 140 (~1.2M decisions, ~35 min on 2 CPU cores). Placement
 against the bots, 128 sampled games every 10 iterations:
 7.95, 7.92, 7.56, 7.54, 7.67, 7.58, 7.66, 7.40, 7.22, 7.42, 7.27, 7.20, 7.35, 7.32 (±0.2).
+Final eval at iteration 150: 7.06 ±0.24 (top-4 5%).
+
+Behaviour at iteration 150 vs random (`diagnose.py`, 32 games): warband at turn 8 is 6.97
+(random 2.25) and unspent gold at turn 8 is 1.24 (random 5.25), so it buys and fills the
+board. But Tavern Tier at turn 8 is 2.31 (random 2.62): it has not learned to level, and it
+takes 41 actions per turn (random 8.5), mostly free minion moves. Leveling is the obvious
+next skill; watch tier-by-turn on the 3070 runs, and if it stays flat, consider a small
+per-action cost on moves.
+
 Self-play alone moves it off the floor, slowly. The 3070 runs use a 40x bigger model and
 ~50x more decisions per hour, so this is only a lower bound on the plumbing working.
 
