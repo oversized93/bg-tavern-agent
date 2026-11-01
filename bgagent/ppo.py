@@ -42,8 +42,11 @@ class TrainConfig:
     # "league": all eight seats are policy-controlled. The learner trains on `learner_seats`;
     # the other seats play a frozen past snapshot (the current policy until the first one).
     # With learner_seats = all eight it is pure self-play.
+    # "mixed": the learner plays `learner_seats`, TavernGym's scripted bots play the rest.
+    # The learners still compete with each other, so the reward varies even while the bots
+    # beat them all, and the learner sees competent play from the start.
     # "bots": one learner seat against seven scripted bots. A fresh policy places last almost
-    # every game there, so the reward barely varies and nothing is learned; start in "league".
+    # every game there, so the reward barely varies and nothing is learned; start elsewhere.
     opponents: str = "league"
     learner_seats: tuple = (0, 1, 2, 3)
     league_size: int = 8  # snapshots kept as opponents
@@ -54,6 +57,7 @@ class TrainConfig:
     # game, so an untrained policy shuffles minions dozens of times a turn; 0 disables it.
     move_cost: float = 0.0
     torch_threads: int = 0  # CPU threads for torch; 0 = torch's default
+    factored: bool = True  # factored action head (see ModelConfig.factored)
     n_games: int = 128
     threads: int = 8
     decisions_per_iter: int = 65536
@@ -118,7 +122,8 @@ class Collector:
         self.cfg, self.device = cfg, device
         self.amp = device.type == "cuda"
         league = cfg.opponents == "league"
-        controlled = tuple(range(8)) if league else (0,)
+        controlled = {"league": tuple(range(8)), "mixed": tuple(cfg.learner_seats),
+                      "bots": (0,)}[cfg.opponents]
         self.env = taverngym.BatchEnv(cfg.n_games, seed=cfg.seed, controlled=controlled,
                                       config=RULES[cfg.rules] or None, threads=cfg.threads)
         n = self.env.n_slots
@@ -303,7 +308,14 @@ class Trainer:
         if cfg.torch_threads:
             torch.set_num_threads(cfg.torch_threads)
         self.device = pick_device(cfg.device)
-        self.model = TavernNet(ModelConfig.preset(cfg.model)).to(self.device)
+        mcfg = ModelConfig.preset(cfg.model)
+        mcfg.factored = cfg.factored
+        latest = self.run_dir / "latest.pt"
+        if latest.exists():  # resume with the architecture the run was started with
+            from .policy import model_config_from
+
+            mcfg = model_config_from(torch.load(latest, map_location="cpu", weights_only=False))
+        self.model = TavernNet(mcfg).to(self.device)
         self.opt = torch.optim.AdamW(self.model.parameters(), lr=cfg.lr, weight_decay=0.0,
                                      eps=1e-5)
         self.it = 0

@@ -16,9 +16,15 @@ from . import layout as L
 from .model import ModelConfig, TavernNet
 
 
+def model_config_from(ck) -> ModelConfig:
+    """The model config saved in a checkpoint. Checkpoints from before the factored action
+    head have no `factored` key and were trained without it."""
+    return ModelConfig(**{"factored": False, **ck["model_config"]})
+
+
 def load_policy(path, device="cpu"):
     ck = torch.load(Path(path), map_location=device, weights_only=False)
-    model = TavernNet(ModelConfig(**ck["model_config"])).to(device)
+    model = TavernNet(model_config_from(ck)).to(device)
     model.load_state_dict(ck["model"])
     return model.eval(), ck.get("iteration")
 

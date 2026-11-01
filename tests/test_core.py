@@ -71,6 +71,48 @@ def test_model_masks_illegal_actions():
     assert value.abs().max() <= 1 and place.shape == (8, 8)
 
 
+def test_factored_head_is_type_times_target():
+    from bgagent.model import ACTION_GROUPS
+
+    torch.manual_seed(0)
+    tgt = torch.randn(4, L.N_ACTIONS)
+    mask = torch.rand(4, L.N_ACTIONS) < 0.3
+    mask[:, L.A_END] = True
+    mask[0, L.A_MOVE :] = False  # a state with no legal move
+    tgt = tgt.masked_fill(~mask, float("-inf"))
+    typ = torch.randn(4, len(ACTION_GROUPS))
+    p = torch.softmax(TavernNet.factor(tgt, typ), -1)
+    assert torch.allclose(p.sum(-1), torch.ones(4))
+    assert (p[~mask] == 0).all()
+    legal_types = torch.stack([mask[:, s:e].any(-1) for s, e in ACTION_GROUPS], 1)
+    pt = torch.softmax(typ.masked_fill(~legal_types, float("-inf")), -1)
+    for k, (s, e) in enumerate(ACTION_GROUPS):
+        assert torch.allclose(p[:, s:e].sum(-1), pt[:, k], atol=1e-6)
+        within = torch.softmax(tgt[1, s:e], -1)
+        if mask[1, s:e].any():
+            assert torch.allclose(p[1, s:e] / pt[1, k], within, atol=1e-5)
+
+
+def test_fresh_factored_policy_does_not_favour_moves():
+    """With a full board, an untrained flat head puts most of its mass on the 42 moves; the
+    factored head gives moves about one share per legal action type."""
+    torch.manual_seed(0)
+    for o in random_observations(400, seed=11):
+        f = o["features"]
+        full = np.nonzero(o["ready"] & (np.round(f[:, 33] * 7) >= 6))[0]
+        if len(full):
+            break
+    i = full[:1]
+    args = (torch.from_numpy(f[i]), torch.from_numpy(o["cards"][i]),
+            torch.from_numpy(o["action_mask"][i]))
+    move_share = {}
+    for fac in (False, True):
+        net = TavernNet(ModelConfig(d=64, layers=2, heads=4, factored=fac))
+        with torch.no_grad():
+            move_share[fac] = torch.softmax(net(*args)[0], -1)[0, L.A_MOVE :].sum().item()
+    assert move_share[False] > 0.5 and move_share[True] < 0.3
+
+
 def test_action_names_match_pointer_layout():
     assert taverngym.action_name(L.A_PLAY + 3 * L.N_POS + 2).startswith("Play { hand: 3, pos: 2")
     assert taverngym.action_name(L.A_MAGNETIZE + 4 * L.N_BOARD + 5) == "Magnetize { hand: 4, board: 5 }"

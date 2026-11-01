@@ -18,6 +18,18 @@ import torch.nn.functional as Fn
 from . import layout as L
 
 
+# Action types for the factored head: contiguous ranges of the 245 actions.
+ACTION_GROUPS = [
+    (L.A_END, L.A_END + 1), (L.A_REFRESH, L.A_REFRESH + 1), (L.A_FREEZE, L.A_FREEZE + 1),
+    (L.A_UPGRADE, L.A_UPGRADE + 1), (L.A_HERO_POWER, L.A_DARK_GIFT),
+    (L.A_DARK_GIFT, L.A_CANCEL), (L.A_CANCEL, L.A_BUY), (L.A_BUY, L.A_SELL),
+    (L.A_SELL, L.A_ACTIVATE), (L.A_ACTIVATE, L.A_CHOOSE), (L.A_CHOOSE, L.A_PLAY),
+    (L.A_PLAY, L.A_MAGNETIZE), (L.A_MAGNETIZE, L.A_MOVE), (L.A_MOVE, L.N_ACTIONS),
+]
+assert ACTION_GROUPS[0][0] == 0 and ACTION_GROUPS[-1][1] == L.N_ACTIONS
+assert all(a[1] == b[0] for a, b in zip(ACTION_GROUPS, ACTION_GROUPS[1:]))
+
+
 @dataclass
 class ModelConfig:
     d: int = 384
@@ -25,6 +37,10 @@ class ModelConfig:
     heads: int = 8
     ff_mult: int = 4
     dropout: float = 0.0
+    # Factored policy: P(action type) x P(target | type). Without it, the 42 legal minion
+    # moves on a full board swamp every other choice and the policy learns to shuffle.
+    # Checkpoints saved before this option existed load with factored=False.
+    factored: bool = True
 
     @staticmethod
     def preset(name: str) -> "ModelConfig":
@@ -65,6 +81,10 @@ class TavernNet(nn.Module):
         self.h_move = nn.Linear(d, L.N_BOARD)
         self.mag_q = nn.Linear(d, d)
         self.mag_k = nn.Linear(d, d)
+        if cfg.factored:
+            self.h_type = nn.Linear(2 * d, len(ACTION_GROUPS))
+            nn.init.normal_(self.h_type.weight, std=0.01)
+            nn.init.zeros_(self.h_type.bias)
         # value + auxiliary placement from the global token and a mean over all tokens
         self.v = nn.Sequential(nn.Linear(2 * d, d), nn.GELU(), nn.Linear(d, 1))
         self.place = nn.Sequential(nn.Linear(2 * d, d), nn.GELU(), nn.Linear(d, 8))
@@ -137,9 +157,24 @@ class TavernNet(nn.Module):
         if mask is not None:
             logits = logits.masked_fill(~mask, float("-inf"))
         pooled = torch.cat([g, h.mean(1)], -1)
+        if self.cfg.factored:
+            logits = self.factor(logits, self.h_type(pooled).float())
         value = torch.tanh(self.v(pooled).squeeze(-1).float())
         place = self.place(pooled).float()
         return logits, value, place
+
+    @staticmethod
+    def factor(target_logits, type_logits):
+        """logit(a) = type(g) + log softmax of the targets within g, over legal targets only.
+        Softmax over all 245 of these is exactly P(type) x P(target | type), with the type
+        distribution renormalised over the types that have a legal action."""
+        parts = []
+        for k, (s, e) in enumerate(ACTION_GROUPS):
+            x = target_logits[:, s:e]
+            lse = torch.logsumexp(x, -1, keepdim=True)
+            lse = torch.where(torch.isfinite(lse), lse, torch.zeros_like(lse))  # no legal target
+            parts.append(x - lse + type_logits[:, k : k + 1])
+        return torch.cat(parts, 1)
 
 
 def param_count(model: nn.Module) -> int:
