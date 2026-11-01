@@ -174,8 +174,46 @@ learning rate the bots are close to exhausted as opponents.
 recommendation is the policy's best play, which is what the overlay will show. Both 512-game
 runs finished in minutes once turns were capped.
 
+## 2026-11-01: 100 more iterations from f4; harder opponents vs control
+
+Both continue f4 (it 100, 3.35 greedy vs bots) to it 200 with the same settings (tiny model,
+lr 1e-3, 8k decisions/iter), plus the cancel cap and 50-action turn cap (`runs/launch-g.sh`):
+- g1 control: 4 learners + 4 scripted bots, as before.
+- g2 hybrid: 4 learners + 2 seats played by a past snapshot (league of the last 4, seeded
+  with f4's it 70-100) + 2 bots. `opponents=hybrid`, new.
+
+Eval vs bots, 128 sampled games every 10 iterations (it 110-200):
+
+| run | 110 | 120 | 130 | 140 | 150 | 160 | 170 | 180 | 190 | 200 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| g1 control | 3.83 | 3.69 | 3.38 | 3.66 | 3.34 | 3.35 | 3.07 | 3.12 | 3.01 | 3.09 |
+| g2 hybrid | 3.95 | 3.73 | 3.22 | 3.34 | 3.41 | 3.30 | 3.14 | 3.15 | 3.08 | 3.10 |
+
+Greedy, 512 games, capped full rules. "vs f4" puts seven copies of f4 it 100 around the
+tested policy (`--vs`); 4.5 = equal strength. Check: f4 vs itself, 4.72 ±0.50 (64 sampled).
+
+| policy | vs bots | top-1 | top-4 | vs f4 it 100 | top-1 | top-4 |
+|---|---|---|---|---|---|---|
+| f4 it 100 | 3.35 ±0.16 | 19.1% | 72.9% | (4.5) | | |
+| g1 it 200 | 2.94 ±0.15 | 21.9% | 80.9% | 3.80 ±0.20 | 19.1% | 61.7% |
+| g2 it 200 | 3.01 ±0.15 | 20.3% | 81.4% | 3.97 ±0.20 | 17.4% | 61.9% |
+
+Head to head between them: g1 among seven g2s 4.48 ±0.19; g2 among seven g1s 4.44 ±0.20.
+
+- **More training still pays.** 100 more iterations made it clearly stronger than f4: 0.4
+  places better against the bots, and 0.5-0.7 better than 4.5 against f4 itself.
+- **Harder opponents made no difference yet.** g1 and g2 are equal head to head. g2's
+  rollouts are ~35% slower (1,300-1,400 vs 2,000-2,250 decisions/s) because the snapshot
+  seats need the network too. Mixed (4 + 4 bots) stays the default; revisit hybrid when
+  the bots really are exhausted.
+- Behaviour drift, it 100 -> 200 (training rollouts): actions per turn 18 -> 21-23, entropy
+  1.79 -> 1.46-1.54, tier at turn 8 3.39 -> 2.94 (g1) / 3.19 (g2), warband 6.8-6.9.
+- The bots aren't exhausted: it improved by 0.4 against them in these 100 iterations.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
 - Whether self-play alone reaches 4.5 vs bots, or needs bot/library opponents mixed in.
+  (Answered: mixed reaches 2.94 greedy; pure self-play plateaued near 6.9.)
+- Where the tiny model's curve flattens, and how much the full model on the 3070 adds.
 - Reward shaping: none so far (pure placement reward), as in TavernGym.
