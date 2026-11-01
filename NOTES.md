@@ -33,6 +33,21 @@ Dark Gifts.
 forth) until the 200-actions-per-turn cap, which makes greedy evaluation crawl. Training-time
 evaluation samples from the policy; `scripts/evaluate.py` is greedy by default.
 
+**First learning check (CPU, tiny model, simple rules, pure self-play, 8k decisions/iter,
+lr 3e-4, 2 epochs).** Placement against the bots doesn't move this early (7.95 at it 10,
+7.92 at it 20, 128 sampled games each): a weak policy is 8th whatever it does. Behaviour does
+move. `scripts/diagnose.py`, 32 games each, warband size at End Turn:
+
+| policy | turn 4 | turn 6 | turn 8 |
+|---|---|---|---|
+| random | 0.78 | 1.50 | 2.25 |
+| it 10 (82k decisions) | 1.02 | 2.43 | 3.22 |
+| it 20 (164k decisions) | 1.64 | 3.48 | 5.28 |
+
+So the reward reaches the policy and it is learning to fill its board, after about 0.05% of
+the paper's per-stage budget. Tier at turn 8 hasn't risen yet (2.6-2.9), and gold is still
+left unspent; those are the next things to watch.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
