@@ -316,6 +316,22 @@ Capped at 500 iterations for a first review (`lr_schedule_iters=4000` keeps the 
 First evaluations (bots: 256 sampled games; TavernBench value / policy): it 10 7.73 ±0.10,
 0.30 / 0.30; it 20 5.95 ±0.24, 0.33 / 0.28. The tiny CPU model took 50+ iterations to reach 6.
 
+**full-01 check-in at it 140** (~3 h of training, ~9M decisions):
+- vs bots (256 sampled games): it 60 3.72, 80 3.24, 100 3.23, 110 3.12, 120 3.12, 130 3.49
+  (±0.2 each). Passed a bot's 4.50 before it 60 (f4 needed 70 CPU iterations); flattening
+  near 3.1-3.5 since it 80. Sampled, so not comparable to g1's 2.94 greedy.
+- TavernBench value 0.30 -> 0.40 (it 130, its best), policy flat at 0.28-0.35 the whole way.
+  Positioning is the one category clearly rising: 0.28 -> 0.45 (both pickers). Policy
+  ordering fell 0.42-0.50 (it 30-50) -> 0.17-0.23 (it 100-130) while value ordering stayed
+  0.45-0.65: the policy's card order is drifting away from what its own value head prefers.
+  Economy and strategy stay near 0-0.25 (few tasks each, so noisy).
+- Behaviour (training rollouts): 21 actions/turn, 22% of them moves (11% at it 30, ~4.7
+  moves a turn of the 6 allowed); 6.8 minions at turn 8, but **tier 2.6 at turn 8**: lower
+  than f4 (3.4) and g1 (2.94). Each run levels less the longer it trains: flooding the board
+  at low tier is what beats these bots. Not a bug, but real lobbies punish it; watch whether
+  self-play pulls it back up by it 500, and if not, try hybrid opponents.
+- Health: kl 0.005-0.009, entropy 1.45-1.50, 0 early stops, 4.5 GB VRAM, 66 C, 34 s/iter.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
