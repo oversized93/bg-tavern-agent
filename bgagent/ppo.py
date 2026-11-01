@@ -74,6 +74,9 @@ class TrainConfig:
     ent_coef: float = 0.002
     vf_coef: float = 0.5
     aux_coef: float = 0.1
+    # Weight of the next-combat auxiliary loss (ModelConfig.combat_head); 0 = no head. Only
+    # for new runs: a checkpoint without the head can't grow one on resume.
+    combat_coef: float = 0.0
     max_grad_norm: float = 1.0
     seed: int = 0
     checkpoint_every: int = 5
@@ -226,8 +229,34 @@ class Collector:
         return done_trajs, time.time() - t0
 
 
+F_HEALTH, F_ARMOR, F_HERO_SELECT = 5, 6, 1  # global floats: health / 40, armor / 20
+
+
+def combat_labels(f, place):
+    """Per decision, the combat right after its turn: (lost it, damage taken, weight).
+
+    Read from the seat's own observations: Health + Armor at its last decision of a turn
+    against its first decision of the next. In the seat's last turn, 1st place won that
+    combat and every other place died in it. Hero select has no combat (weight 0)."""
+    f = f.astype(np.float32)
+    turn = np.round(f[:, 0] * 20).astype(np.int64)
+    hp = f[:, F_HEALTH] * 40 + f[:, F_ARMOR] * 20
+    dmg = np.zeros(len(f), np.float32)
+    starts = np.flatnonzero(np.r_[True, turn[1:] != turn[:-1]])
+    ends = np.r_[starts[1:], len(f)]
+    for k, (s, e) in enumerate(zip(starts, ends)):
+        if k + 1 < len(starts):
+            d = max(0.0, hp[e - 1] - hp[starts[k + 1]])
+        else:
+            d = 0.0 if place == 1 else max(hp[e - 1], 1.0)
+        dmg[s:e] = d
+    w = (f[:, F_HERO_SELECT] < 0.5).astype(np.float32)
+    return (dmg > 0).astype(np.float32), dmg, w
+
+
 def build_batch(trajs, gamma, lam):
     feats, cards, masks, acts, logps, vals, advs, rets, places = ([] for _ in range(9))
+    lost, dmg, cw = [], [], []
     for traj, place in trajs:
         v = np.array([t[5] for t in traj], np.float32)
         r = np.array([t[6] for t in traj], np.float32)
@@ -247,12 +276,17 @@ def build_batch(trajs, gamma, lam):
         advs.append(adv)
         rets.append(adv + v)
         places.append(np.full(len(traj), place - 1, np.int64))
+        lo, dm, w = combat_labels(feats[-1], place)
+        lost.append(lo)
+        dmg.append(dm)
+        cw.append(w)
     cat = np.concatenate
     return {
         "feats": cat(feats), "cards": cat(cards),
         "mask": np.unpackbits(cat(masks), axis=1, count=L.N_ACTIONS).astype(bool),
         "act": cat(acts), "logp": cat(logps), "val": cat(vals), "adv": cat(advs),
         "ret": cat(rets), "place": cat(places),
+        "lost": cat(lost), "dmg": cat(dmg), "cw": cat(cw),
     }
 
 
@@ -260,7 +294,9 @@ def ppo_update(model, opt, batch, cfg: TrainConfig, device):
     amp = device.type == "cuda"
     n = len(batch["act"])
     T = {k: torch.from_numpy(v) for k, v in batch.items()}
-    stats = {"pg": 0.0, "vf": 0.0, "ent": 0.0, "aux": 0.0, "kl": 0.0, "clipfrac": 0.0}
+    stats = {"pg": 0.0, "vf": 0.0, "ent": 0.0, "aux": 0.0, "combat": 0.0, "kl": 0.0,
+             "clipfrac": 0.0}
+    use_combat = cfg.combat_coef > 0
     steps, stop = 0, False
     for _ in range(cfg.epochs):
         perm = torch.randperm(n)
@@ -277,8 +313,9 @@ def ppo_update(model, opt, batch, cfg: TrainConfig, device):
                 w = len(ix) / len(mb)
                 g = lambda k, dt=None: T[k][ix].to(device, dt)  # noqa: E731
                 with torch.autocast(device.type, dtype=torch.bfloat16, enabled=amp):
-                    logits, value, place = model(g("feats", torch.float32), g("cards"),
-                                                 g("mask"))
+                    out = model(g("feats", torch.float32), g("cards"), g("mask"),
+                                combat=use_combat)
+                logits, value, place = out[:3]
                 logp_all = torch.log_softmax(logits, -1)
                 logp = logp_all.gather(1, g("act")[:, None]).squeeze(-1)
                 ratio = torch.exp(logp - g("logp"))
@@ -289,12 +326,21 @@ def ppo_update(model, opt, batch, cfg: TrainConfig, device):
                 ent = -(p * logp_all.masked_fill(~g("mask"), 0.0)).sum(-1).mean()
                 aux = Fn.cross_entropy(place, g("place"))
                 loss = pg + cfg.vf_coef * vf - cfg.ent_coef * ent + cfg.aux_coef * aux
+                combat = torch.zeros((), device=device)
+                if use_combat:
+                    c, cw = out[3], g("cw")
+                    lost_l = Fn.binary_cross_entropy_with_logits(c[:, 0], g("lost"),
+                                                                 reduction="none")
+                    dmg_l = Fn.smooth_l1_loss(c[:, 1], g("dmg") / 10, reduction="none")
+                    combat = ((lost_l + dmg_l) * cw).sum() / cw.sum().clamp(min=1)
+                    loss = loss + cfg.combat_coef * combat
                 (loss * w).backward()
                 with torch.no_grad():
                     kl = ((ratio - 1) - torch.log(ratio)).mean()  # k3 estimator
                     mb_stats["kl"] += kl.item() * w
                     mb_stats["clipfrac"] += ((ratio - 1).abs() > cfg.clip).float().mean().item() * w
-                for k, val in (("pg", pg), ("vf", vf), ("ent", ent), ("aux", aux)):
+                for k, val in (("pg", pg), ("vf", vf), ("ent", ent), ("aux", aux),
+                               ("combat", combat)):
                     mb_stats[k] += val.item() * w
             torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.max_grad_norm)
             opt.step()
@@ -326,6 +372,7 @@ class Trainer:
         mcfg.move_cap = cfg.move_cap
         mcfg.no_refreeze = cfg.no_refreeze
         mcfg.cancel_cap = cfg.cancel_cap
+        mcfg.combat_head = cfg.combat_coef > 0
         latest = self.run_dir / "latest.pt"
         if latest.exists():  # resume with the architecture the run was started with
             from .policy import model_config_from
@@ -334,6 +381,9 @@ class Trainer:
             # the action filter is not architecture: the run's config decides it
             mcfg.move_cap, mcfg.no_refreeze = cfg.move_cap, cfg.no_refreeze
             mcfg.cancel_cap = cfg.cancel_cap
+            if cfg.combat_coef > 0 and not mcfg.combat_head:
+                raise ValueError("combat_coef > 0, but this run's model has no combat head; "
+                                 "start a new run")
         self.model = TavernNet(mcfg).to(self.device)
         self.opt = torch.optim.AdamW(self.model.parameters(), lr=cfg.lr, weight_decay=0.0,
                                      eps=1e-5)

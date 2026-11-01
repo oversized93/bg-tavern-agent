@@ -45,6 +45,9 @@ class ModelConfig:
     move_cap: int = 6
     no_refreeze: bool = True
     cancel_cap: int = 2
+    # Auxiliary head predicting the combat right after this turn: (lost it, damage taken).
+    # A label every turn instead of one per game; training only (see ppo.combat_labels).
+    combat_head: bool = False
 
     @staticmethod
     def preset(name: str) -> "ModelConfig":
@@ -92,6 +95,8 @@ class TavernNet(nn.Module):
         # value + auxiliary placement from the global token and a mean over all tokens
         self.v = nn.Sequential(nn.Linear(2 * d, d), nn.GELU(), nn.Linear(d, 1))
         self.place = nn.Sequential(nn.Linear(2 * d, d), nn.GELU(), nn.Linear(d, 8))
+        if cfg.combat_head:
+            self.combat = nn.Sequential(nn.Linear(2 * d, d), nn.GELU(), nn.Linear(d, 2))
         nn.init.normal_(self.ctx_pos, std=0.02)
         nn.init.normal_(self.type_emb, std=0.02)
         for h in (self.h_global, self.h_buy, self.h_sell, self.h_activate, self.h_choose,
@@ -136,9 +141,10 @@ class TavernNet(nn.Module):
         x = torch.cat([g.unsqueeze(1), board, hand, shop, choice, opp], 1)
         return x + self.type_emb
 
-    def forward(self, feats, cards, mask=None):
+    def forward(self, feats, cards, mask=None, combat=False):
         """Returns (logits [B, 245] with illegal actions at -inf if mask given, value [B],
-        placement logits [B, 8])."""
+        placement logits [B, 8]); with `combat`, also the combat head's [B, 2] (loss logit,
+        damage / 10)."""
         h = self.norm(self.trunk(self.tokens(feats, cards)))
         s = lambda name: h[:, L.T[name][0] : L.T[name][1]]  # noqa: E731
         g, board, hand, shop, choice = h[:, 0], s("board"), s("hand"), s("shop"), s("choice")
@@ -165,6 +171,8 @@ class TavernNet(nn.Module):
             logits = self.factor(logits, self.h_type(pooled).float())
         value = torch.tanh(self.v(pooled).squeeze(-1).float())
         place = self.place(pooled).float()
+        if combat:
+            return logits, value, place, self.combat(pooled).float()
         return logits, value, place
 
     @staticmethod

@@ -265,6 +265,37 @@ def test_gae_with_terminal_reward():
     assert (b["place"] == 2).all() and b["mask"].shape == (3, L.N_ACTIONS)
 
 
+def test_combat_labels():
+    from bgagent.ppo import combat_labels
+
+    f = np.zeros((7, L.OBS_FLOATS), np.float16)
+    turns = [0, 1, 1, 2, 2, 2, 3]
+    hp = [40, 30, 30, 25, 25, 26, 25]  # turn 1 -> 2 loses 5; turn 2 -> 3 loses 1 (armor ends at 26)
+    for i, (t, h) in enumerate(zip(turns, hp)):
+        f[i, 0], f[i, 5] = t / 20, h / 40
+    f[0, 1] = 1  # hero select
+    lost, dmg, w = combat_labels(f, place=3)
+    assert np.allclose(dmg, [10, 5, 5, 1, 1, 1, 25], atol=0.05)
+    assert (lost == 1).all() and w.tolist() == [0, 1, 1, 1, 1, 1, 1]
+    _, dmg1, _ = combat_labels(f, place=1)
+    assert dmg1[-1] == 0  # 1st place won its last combat
+
+
+def test_combat_head_trains():
+    from bgagent.ppo import TrainConfig, build_batch, ppo_update
+
+    cfg = TrainConfig(model="tiny", minibatch=16, micro_batch=8, combat_coef=1.0)
+    net = TavernNet(ModelConfig(d=64, layers=2, heads=4, combat_head=True))
+    o = next(iter(random_observations(1)))
+    mk = np.packbits(o["action_mask"][0])
+    traj = [[o["features"][0].astype(np.float16), o["cards"][0].astype(np.int16), mk, 0, -1.0,
+             0.0, 0.0] for _ in range(16)]
+    b = build_batch([(traj, 4)], 1.0, 0.995)
+    opt = torch.optim.AdamW(net.parameters(), lr=1e-3)
+    stats = ppo_update(net, opt, b, cfg, torch.device("cpu"))
+    assert np.isfinite(stats["combat"]) and stats["updates"] >= 1
+
+
 def test_advisor_on_saved_state(tmp_path):
     g = taverngym.Game(seed=5)
     while not (g.turn >= 3 and g.needs_action(0)):

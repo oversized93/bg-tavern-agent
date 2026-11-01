@@ -20,7 +20,8 @@ from .model import ModelConfig, TavernNet
 def model_config_from(ck) -> ModelConfig:
     """The model config saved in a checkpoint. Keys added later default to what older
     checkpoints were trained with: no factored head, no action filter."""
-    old = {"factored": False, "move_cap": 0, "no_refreeze": False, "cancel_cap": 0}
+    old = {"factored": False, "move_cap": 0, "no_refreeze": False, "cancel_cap": 0,
+           "combat_head": False}
     return ModelConfig(**{**old, **ck["model_config"]})
 
 
