@@ -67,7 +67,7 @@ python scripts/tavernbench.py runs/smoke/latest.pt --bench "$AT/tavernbench" --d
 
 step "7/7 Memory check: one full-size update on the 3070 (picks micro_batch)"
 mkdir -p runs
-for mb in 2048 1024 512; do
+for mb in 512 256; do  # 512: measured fit on an 8 GB 3070 (NOTES.md)
   rm -rf runs/_probe
   if python scripts/train.py --preset 3070 --run runs/_probe \
        --set iterations=1 n_games=16 decisions_per_iter=8192 eval_every=0 micro_batch=$mb \
@@ -82,6 +82,6 @@ for mb in 2048 1024 512; do
   echo "micro_batch=$mb ran out of GPU memory; trying smaller"
 done
 rm -rf runs/_probe runs/_probe.log
-[ -f runs/.micro_batch ] || { echo "Even micro_batch=512 ran out of memory."; exit 1; }
+[ -f runs/.micro_batch ] || { echo "Even micro_batch=256 ran out of memory."; exit 1; }
 
 step "Setup finished. Start the long run with:  bash ~/bg-tavern-agent/scripts/start_3070.sh"

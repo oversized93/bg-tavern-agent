@@ -10,7 +10,7 @@
 set -eo pipefail
 cd "$HOME/bg-tavern-agent"
 RUN="${1:-runs/full-01}"
-MB="$(cat runs/.micro_batch 2>/dev/null || echo 2048)"  # chosen by setup_wsl.sh's memory check
+MB="$(cat runs/.micro_batch 2>/dev/null || echo 512)"  # chosen by setup_wsl.sh's memory check
 # The recipe on top of --preset 3070 (decided from the CPU tests in NOTES.md).
 SET="bench_dir=$HOME/AutoTavern/tavernbench micro_batch=$MB device=cuda"
 

@@ -22,7 +22,7 @@ input automation, no memory writing, read-only on the game's logs.
 | `scripts/diagnose.py` | Behaviour stats (warband size, tier, unspent gold by turn) that show learning before placement moves |
 
 ## Quick start
-Setup on Windows with an NVIDIA GPU: [docs/SETUP_WSL2.md](docs/SETUP_WSL2.md).
+Setup on Windows with an NVIDIA GPU: [docs/SETUP_WINDOWS.md](docs/SETUP_WINDOWS.md) (native, no admin; how the 3070 runs) or [docs/SETUP_WSL2.md](docs/SETUP_WSL2.md) (WSL2).
 
 ```bash
 pytest -q                                                        # sanity checks

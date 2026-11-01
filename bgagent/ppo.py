@@ -82,6 +82,11 @@ class TrainConfig:
     checkpoint_every: int = 5
     max_traj_len: int = 4000  # drop a trajectory that runs this long (a stuck game)
     device: str = "auto"
+    # Cap on PyTorch's share of GPU memory (0 = no cap). On Windows the NVIDIA driver doesn't
+    # fail when VRAM runs out: it spills into system RAM and the update gets ~5x slower
+    # (NOTES.md, 2026-11-01). The cap makes an oversized micro_batch raise out-of-memory
+    # instead, which the setup scripts' memory check catches.
+    gpu_mem_fraction: float = 0.8
 
     @staticmethod
     def preset(name: str) -> "TrainConfig":
@@ -101,7 +106,7 @@ class TrainConfig:
         if name == "3070":  # the multi-day run on an 8 GB card
             return TrainConfig(model="full", opponents="mixed", n_games=64,
                                learner_seats=(0, 1, 2, 3), decisions_per_iter=65536,
-                               minibatch=8192, micro_batch=2048, lr=3e-4, lr_final=1e-4)
+                               minibatch=8192, micro_batch=512, lr=3e-4, lr_final=1e-4)
         raise KeyError(name)
 
 
@@ -367,6 +372,9 @@ class Trainer:
         if cfg.torch_threads:
             torch.set_num_threads(cfg.torch_threads)
         self.device = pick_device(cfg.device)
+        if self.device.type == "cuda" and cfg.gpu_mem_fraction:
+            index = self.device.index if self.device.index is not None else torch.cuda.current_device()
+            torch.cuda.set_per_process_memory_fraction(cfg.gpu_mem_fraction, index)
         mcfg = ModelConfig.preset(cfg.model)
         mcfg.factored = cfg.factored
         mcfg.move_cap = cfg.move_cap

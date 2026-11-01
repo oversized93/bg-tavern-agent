@@ -280,6 +280,38 @@ the bots goes from 6.27 to 4.08.
 h2 (the small 2.9M model, same recipe, lr 5e-4) was killed for memory at iteration 8 while h1
 ran beside it (~3.4 GB; the container has 8 GB); resumed alone with micro_batch 512.
 
+## 2026-11-01: native Windows on the 3070
+
+The 3070 machine has no WSL, no Visual Studio C++ tools and no Windows SDK, and installing
+any of them needs admin rights. So TavernGym is built natively with Rust's **GNU** toolchain
+(user folder, no admin; its bundled linker needs no MSVC). One snag: pyo3 links Python with
+a raw-dylib import, for which rustc calls `dlltool`. The toolchain's bundled GNU dlltool
+fails ("CreateProcess": no assembler shipped), so we use LLVM's dlltool instead: Rust's
+`llvm-tools` component, `llvm-ar.exe` copied as `dlltool.exe`. Build: 2 min. All 16 tests
+pass on Windows, including the TavernBench oracle check, so the Windows build plays the
+same game. `scripts/setup_windows.ps1`, `docs/SETUP_WINDOWS.md`.
+
+Speed: random play 11,040 decisions/s (64 games, 8 threads). PyTorch 2.14.1+cu130 on the
+3070, driver 596.49.
+
+**GPU memory spills instead of failing.** The first full-size run (micro_batch 2048) used
+7.4 GB of VRAM plus 5.8 GB of shared system RAM (`\GPU Process Memory(*)\Shared Usage`), and
+iteration 2's update took 237 s. The NVIDIA driver on Windows falls back to system memory
+rather than raising out-of-memory, so the memory check that "passed" at 2048 had been
+spilling all along. Fix: `gpu_mem_fraction=0.8` caps PyTorch at 80% of VRAM so an oversized
+batch raises out-of-memory instead. Measured under the cap, one iteration of 16k decisions:
+
+| micro_batch | peak reserved | update |
+|---|---|---|
+| 1024 | 6.39 GB (of the 6.4 GB cap) | 6 s |
+| 512 | 3.39 GB | 6 s |
+
+512 is the 3070 preset now. Full-size iteration (65,536 decisions): 12 s rollout + 22 s
+update = 34 s, 3.7 GB VRAM, ~70 MB shared. The aborted run is `runs/full-01-aborted-sysmem`.
+
+**runs/full-01 started 2026-11-01 10:21** on the 3070: `--preset 3070` (full model 16.9M,
+4 learners + 4 bots, full rules, lr 3e-4 -> 1e-4), 4,000 iterations, TavernBench every 10.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.

@@ -32,7 +32,8 @@ Power.log to suggest moves. Cranny plays every game himself.
 - `bgagent/tavernbench.py`: answers TavernBench's 23 decision scenarios with a policy (value
   head or constrained policy pick) and scores them with the benchmark's own code. Needs an
   AutoTavern checkout at the pinned commit (`--bench`, `bench_dir`, `TAVERNBENCH_DIR`).
-- `scripts/`: train.py, evaluate.py, advise.py, status.py.
+- `scripts/`: train.py, evaluate.py, advise.py, status.py, tavernbench.py; setup and start scripts
+  for Windows (`setup_windows.ps1`, `start_3070.cmd`) and WSL2 (`setup_wsl.sh`, `start_3070.sh`).
 
 ## Commands
 - Tests: `pytest -q` (fast; run before every commit)
@@ -57,4 +58,7 @@ Power.log to suggest moves. Cranny plays every game himself.
   TavernBench. Report both.
 - Placement: 1 best, 8 worst. Reward: 1st = +1, 8th = -1, linear (TavernGym's).
 - TavernGym is pinned in pyproject.toml. Its card data is patch 36.6.3; live patches drift.
-- Long runs live in tmux inside WSL2. Never delete a run folder without asking.
+- The 3070 run is native Windows (docs/SETUP_WINDOWS.md): `scripts\start_3070.cmd` starts or
+  resumes it in its own window. GPU memory: Windows spills into system RAM instead of failing
+  (5x slower); training caps PyTorch at 80% of VRAM and the 3070 uses micro_batch=512.
+- Never delete a run folder without asking.

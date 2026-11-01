@@ -1,7 +1,8 @@
 # Setting up on Windows (WSL2) with an RTX 3070
 
 TavernGym's own CI only runs on Ubuntu, and WSL2 is the easiest way to give PyTorch the GPU,
-so everything runs inside WSL2.
+so everything runs inside WSL2. (The 3070 machine ended up running natively on Windows with
+no admin rights instead: docs/SETUP_WINDOWS.md. This route still works.)
 
 ## Fast path (three commands)
 1. Windows, PowerShell **as administrator**: `wsl --install -d Ubuntu-24.04`, reboot, open
