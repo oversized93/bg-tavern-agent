@@ -10,47 +10,58 @@ from .rules import rules_config
 EVAL_SEED = 10_000_019  # fixed and far from training seeds, so checkpoints are comparable
 
 
+def _choose(model, feats, cards, mask, sample, device, amp, rng):
+    if model is None:
+        return np.array([rng.choice(np.nonzero(row)[0]) for row in mask])
+    with torch.autocast(device.type, dtype=torch.bfloat16, enabled=amp):
+        logits, _, _ = model(torch.from_numpy(feats).to(device), torch.from_numpy(cards).to(device),
+                             torch.from_numpy(mask).to(device))
+    if sample:
+        return torch.multinomial(torch.softmax(logits.float(), -1), 1)[:, 0].cpu().numpy()
+    return logits.argmax(-1).cpu().numpy()
+
+
 @torch.inference_mode()
 def evaluate(policy, games, n_parallel=64, threads=4, sample=False, device="cpu",
-             seed=EVAL_SEED, rules="full"):
+             seed=EVAL_SEED, rules="full", opponent=None):
     """Average placement (1 best, 8 worst) with a 95% interval, top-1 and top-4 rates.
 
-    `policy=None` plays uniformly random legal actions (the floor: about 7.95). `rules` names
-    a rule set in bgagent/rules.py; "full" is the real game with a per-turn action cap."""
+    `policy` sits in seat 0. By default the other seven seats are TavernGym's scripted bots;
+    with `opponent` (a model) they are seven copies of it, a head-to-head test where 4.5 means
+    "as strong as the opponent". `policy=None` plays uniformly random legal actions (about
+    7.95 against the bots). `rules` names a rule set in bgagent/rules.py; "full" is the real
+    game with a per-turn action cap. Each model uses the action filter it was trained with."""
     device = torch.device(device)
     amp = device.type == "cuda"
-    env = taverngym.BatchEnv(min(n_parallel, games), seed=seed, controlled=(0,),
+    controlled = (0,) if opponent is None else tuple(range(8))
+    k = len(controlled)
+    n_games = max(1, min(n_parallel, games))
+    env = taverngym.BatchEnv(n_games, seed=seed, controlled=controlled,
                              config=rules_config(rules), threads=threads)
     rng = np.random.default_rng(seed)
-    places, started = [], env.n_slots
+    mine = np.arange(env.n_slots) % k == 0  # slot i is seat controlled[i % k] of game i // k
+    places, started = [], n_games
     active = np.ones(env.n_slots, bool)
     filt = ActionFilter.for_model(env.n_slots, policy)  # the rules the policy trained with
+    opp_filt = ActionFilter.for_model(env.n_slots, opponent)
     o = env.observe()
     while len(places) < games:
         ready = o["ready"] & active
         actions = np.zeros(env.n_slots, np.int64)
-        idx = np.nonzero(ready)[0]
-        if len(idx):
-            m = filt.apply(o["features"][idx], o["action_mask"][idx], idx)
-            if policy is None:
-                actions[idx] = [rng.choice(np.nonzero(row)[0]) for row in m]
-            else:
-                with torch.autocast(device.type, dtype=torch.bfloat16, enabled=amp):
-                    logits, _, _ = policy(torch.from_numpy(o["features"][idx]).to(device),
-                                          torch.from_numpy(o["cards"][idx]).to(device),
-                                          torch.from_numpy(m).to(device))
-                if sample:
-                    a = torch.multinomial(torch.softmax(logits.float(), -1), 1)[:, 0]
-                else:
-                    a = logits.argmax(-1)
-                actions[idx] = a.cpu().numpy()
-            filt.record(idx, actions[idx])
+        for model, f, sel in ((policy, filt, mine), (opponent, opp_filt, ~mine)):
+            idx = np.nonzero(ready & sel)[0]
+            if not len(idx):
+                continue
+            m = f.apply(o["features"][idx], o["action_mask"][idx], idx)
+            actions[idx] = _choose(model, o["features"][idx], o["cards"][idx], m, sample,
+                                   device, amp, rng)
+            f.record(idx, actions[idx])
         _, dones, info = env.step(actions)
-        for i in np.nonzero(dones & active)[0]:
+        for i in np.nonzero(dones & active & mine)[0]:
             if info["placement"][i] > 0:
                 places.append(int(info["placement"][i]))
             if started >= games:
-                active[i] = False  # enough games started; this slot idles
+                active[i : i + k] = False  # enough games started; this game idles
             else:
                 started += 1
         if not active.any() and len(places) < games:

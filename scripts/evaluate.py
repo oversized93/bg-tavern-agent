@@ -3,11 +3,14 @@
     python scripts/evaluate.py runs/full-01/policy_00100.pt --games 2000
     python scripts/evaluate.py random --games 2000          # baseline: random legal actions
     python scripts/evaluate.py runs/full-01 --games 500     # every snapshot in a run folder
+    python scripts/evaluate.py runs/b/policy_00200.pt --vs runs/a/policy_00100.pt   # head to head
 
 Reports average placement (1 best, 8 worst) with a 95% interval, and top-1 / top-4 rates.
 By default the policy takes its most likely action, which is what a recommendation would show;
 --sample samples from it instead. Evaluation seeds are fixed, so checkpoints are comparable.
 For reference, uniformly random play places about 7.95, and a scripted bot 4.5 by symmetry.
+With --vs, the other seven seats are copies of that policy instead of the bots: below 4.5
+means stronger than it.
 """
 
 import argparse
@@ -36,6 +39,7 @@ def main():
     ap.add_argument("--no-refreeze", type=int, choices=[0, 1],
                     help="override the policy's no-refreeze rule")
     ap.add_argument("--cancel-cap", type=int, help="override the policy's cancel cap (0 = off)")
+    ap.add_argument("--vs", help="opponent policy for all seven other seats (default: bots)")
     ap.add_argument("--rules", default="full", choices=sorted(RULES),
                     help="rule set from bgagent/rules.py (default: full, the real game)")
     args = ap.parse_args()
@@ -46,6 +50,7 @@ def main():
         p = Path(args.policy)
         files = sorted(p.glob("policy_*.pt")) if p.is_dir() else [p]
         targets = [(str(f), f) for f in files]
+    opponent = load_policy(args.vs, args.device)[0] if args.vs else None
     for name, f in targets:
         model = load_policy(f, args.device)[0] if f is not None else None
         rules = {}
@@ -59,10 +64,10 @@ def main():
             rules = {"move_cap": model.cfg.move_cap, "no_refreeze": model.cfg.no_refreeze,
                      "cancel_cap": model.cfg.cancel_cap}
         r = evaluate(model, args.games, args.parallel, args.threads, args.sample, args.device,
-                     rules=args.rules)
+                     rules=args.rules, opponent=opponent)
         mode = "sampled" if args.sample else "greedy"
-        print(json.dumps({"policy": name, "mode": mode, "rules": args.rules, **rules, **r}),
-              flush=True)
+        print(json.dumps({"policy": name, "vs": args.vs or "bots", "mode": mode,
+                          "rules": args.rules, **rules, **r}), flush=True)
 
 
 if __name__ == "__main__":

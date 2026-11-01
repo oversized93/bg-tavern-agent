@@ -189,6 +189,28 @@ def test_action_cap_ends_move_loops():
     assert _longest_turn("full") <= ACTION_CAP + 1  # the cap, then End Turn
 
 
+def test_head_to_head_eval():
+    from bgagent.evaluation import evaluate
+
+    torch.manual_seed(0)
+    net = TavernNet(ModelConfig.preset("tiny")).eval()
+    r = evaluate(net, 6, n_parallel=3, threads=1, sample=True, opponent=net)
+    assert r["games"] == 6 and 1 <= r["avg_placement"] <= 8
+
+
+def test_hybrid_opponents_seat_layout():
+    from bgagent.ppo import Collector, TrainConfig
+
+    cfg = TrainConfig(model="tiny", opponents="hybrid", learner_seats=(0, 1, 2, 3),
+                      snapshot_seats=(4, 5), n_games=2, threads=1, decisions_per_iter=1)
+    col = Collector(cfg, torch.device("cpu"))
+    assert col.env.n_slots == 2 * 6  # seats 0-5 controlled, 6-7 scripted bots
+    assert col.learner.sum() == 2 * 4 and not col.learner[[4, 5, 10, 11]].any()
+    net = TavernNet(ModelConfig.preset("tiny")).eval()
+    trajs, _ = col.collect(net)  # stops after the first finished learner game
+    assert trajs and all(1 <= place <= 8 for _, place in trajs)
+
+
 def test_action_names_match_pointer_layout():
     assert taverngym.action_name(L.A_PLAY + 3 * L.N_POS + 2).startswith("Play { hand: 3, pos: 2")
     assert taverngym.action_name(L.A_MAGNETIZE + 4 * L.N_BOARD + 5) == "Magnetize { hand: 4, board: 5 }"

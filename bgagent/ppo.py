@@ -38,8 +38,11 @@ class TrainConfig:
     # beat them all, and the learner sees competent play from the start.
     # "bots": one learner seat against seven scripted bots. A fresh policy places last almost
     # every game there, so the reward barely varies and nothing is learned; start elsewhere.
+    # "hybrid": the learner plays `learner_seats`, a frozen past snapshot plays
+    # `snapshot_seats`, and the scripted bots play the rest. For when the bots get too easy.
     opponents: str = "league"
     learner_seats: tuple = (0, 1, 2, 3)
+    snapshot_seats: tuple = (4, 5)  # "hybrid" only
     league_size: int = 8  # snapshots kept as opponents
     snapshot_every: int = 25  # iterations between policy snapshots (league + eval history)
     eval_every: int = 10  # iterations between evaluations against the scripted bots
@@ -121,8 +124,9 @@ class Collector:
     def __init__(self, cfg: TrainConfig, device):
         self.cfg, self.device = cfg, device
         self.amp = device.type == "cuda"
-        league = cfg.opponents == "league"
+        league = cfg.opponents in ("league", "hybrid")
         controlled = {"league": tuple(range(8)), "mixed": tuple(cfg.learner_seats),
+                      "hybrid": tuple(sorted(set(cfg.learner_seats) | set(cfg.snapshot_seats))),
                       "bots": (0,)}[cfg.opponents]
         self.env = taverngym.BatchEnv(cfg.n_games, seed=cfg.seed, controlled=controlled,
                                       config=rules_config(cfg.rules), threads=cfg.threads)
@@ -324,6 +328,9 @@ class Trainer:
             from .policy import model_config_from
 
             mcfg = model_config_from(torch.load(latest, map_location="cpu", weights_only=False))
+            # the action filter is not architecture: the run's config decides it
+            mcfg.move_cap, mcfg.no_refreeze = cfg.move_cap, cfg.no_refreeze
+            mcfg.cancel_cap = cfg.cancel_cap
         self.model = TavernNet(mcfg).to(self.device)
         self.opt = torch.optim.AdamW(self.model.parameters(), lr=cfg.lr, weight_decay=0.0,
                                      eps=1e-5)
@@ -367,11 +374,17 @@ class Trainer:
         self.model.load_state_dict(ck["model"])
         self.opt.load_state_dict(ck["opt"])
         self.it = ck["iteration"]
-        for i in ck.get("league_iters", []):
+        iters = ck.get("league_iters", [])
+        if not iters and self.cfg.opponents in ("league", "hybrid"):
+            # a run that switches to league / hybrid opponents: start from its own snapshots
+            snaps = sorted(int(f.stem.split("_")[1]) for f in self.run_dir.glob("policy_*.pt"))
+            iters = [i for i in snaps if i <= self.it][-self.cfg.league_size :]
+        for i in iters:
             f = self.run_dir / f"policy_{i:05d}.pt"
             if f.exists():
                 self.league.append((i, torch.load(f, map_location="cpu")["model"]))
-        print(f"resumed from {p} at iteration {self.it}")
+        print(f"resumed from {p} at iteration {self.it}"
+              + (f", league {[i for i, _ in self.league]}" if self.league else ""))
 
     # ---- league
     def maybe_snapshot(self):
@@ -379,14 +392,14 @@ class Trainer:
         if self.it % cfg.snapshot_every:
             return
         self.save_policy()
-        if cfg.opponents != "league":
+        if cfg.opponents not in ("league", "hybrid"):
             return
         sd = {k: v.detach().cpu().clone() for k, v in self.model.state_dict().items()}
         self.league.append((self.it, sd))
         self.league = self.league[-cfg.league_size :]
 
     def pick_opponent(self):
-        if self.cfg.opponents != "league":
+        if self.cfg.opponents not in ("league", "hybrid"):
             return None
         if not self.league:  # until the first snapshot, opponents are the current policy
             return None
