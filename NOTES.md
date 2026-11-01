@@ -111,6 +111,69 @@ Fix: `bgagent/filters.py`, no Freeze while frozen and at most 6 moves per turn, 
 same way in training, evaluation, diagnostics and advice. Applied at inference only to f2
 (trained without it): greedy 5.78 ±0.21 over 256 games, matching sampled play.
 
+## 2026-10-31 (night): train on the full rules; TavernGym has no turn limit
+
+Same CPU settings as f2 (tiny model, factored head, 4 learners + 4 bots, lr 1e-3, 8k
+decisions/iter, 100 iterations), now trained with the action filter. Eval vs bots, 128
+sampled games every 10 iterations, always on the full rules (TavernGym defaults):
+
+| run | 10 | 20 | 30 | 40 | 50 | 60 | 70 | 80 | 90 | 100 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| f2 simple rules, no filter | 7.57 | 6.99 | 6.41 | 6.40 | 6.41 | 6.38 | 5.94 | 5.92 | 5.82 | 5.63 |
+| f3 simple rules, filter | 7.68 | 6.86 | 6.70 | 6.74 | 6.80 | 6.66 | 6.59 | 6.91 | 7.16 | 6.90 |
+| f4 full rules, filter | 6.83 | 5.77 | 5.34 | 4.96 | 4.67 | 4.55 | 3.98 | 3.66 | 3.90 | 3.78 |
+
+**Full rules win by a mile.** f4 passes a scripted bot's 4.50 at iteration 70 and ends at
+3.78 ±0.34 (top-1 13%, top-4 66%). In training it averages 3.39 in lobbies with 3 copies of
+itself and 4 bots; 18 actions per turn, 27% of them moves; 6.9 minions and tier 3.4 at
+turn 8. The simplified rules (no trinkets, no Dark Gifts) were also the rules every earlier
+run trained on, and its evaluations were on the full game: the policy met trinket and Dark
+Gift choices for the first time at test time. So f2's 5.63 understated what the setup could
+do, and the curriculum stage cost more than it saved at this scale. Presets now train on
+full rules, and evaluation says which rules it used.
+
+The scripted bots are weak (TavernGym: "varied, not strong"), so past ~4 they stop being a
+useful yardstick. Next ones: our own past snapshots and TavernBench.
+
+**f3 found a new loop.** With moves capped, it learned to play a minion with a targeted
+Battlecry (or start a targeted Hero Power) and Cancel, over and over: 400-1,071 actions
+per turn by iteration 98-100; 60,000 sampled decisions in 5 games were 49% Cancel and 44%
+Play. Its placement fell from 6.59 to 6.90-7.16 as the loop grew.
+
+**TavernGym has no per-turn action limit.** `max_actions_per_turn` = 200 is only the
+ceiling for `turn_action_caps`, which is empty by default (`config.rs`: "a policy without a
+cap can act forever: whoever drives one sets this"). Earlier notes here that said turns ran
+"to the 200-action cap" were wrong. Checked: a driver that always moves a minion when it
+can spent 2,867 actions in one turn under the defaults, and 50 with our cap. Fixes, both
+tested:
+- `bgagent/rules.py`: every rule set caps each turn at 50 actions (past it, only End
+  Turn). `rules=uncapped` is the old behaviour.
+- `filters.py`: at most 2 Cancels per turn (`cancel_cap`, saved with the model).
+
+A greedy evaluation of f4 under the old, uncapped rules ran for an hour on 512 games
+without finishing (killed); 16 greedy games on another seed finished normally (15.3
+actions per turn), so a few games must have hit an endless loop that the cap now ends.
+
+**f5: f4 plus the caps, 150 iterations.** Eval vs bots (128 sampled games, capped full
+rules): 7.09, 6.27, 5.91, 5.19, 4.84, 5.02, 4.84, 4.12, 4.34, 4.12, 4.08, 4.16, 3.91,
+3.59, 4.08. Same curve as f4 within noise (a different random path); it flattens around
+3.6-4.1 from iteration 80. 16-18 actions per turn, 30% moves. At this model size and
+learning rate the bots are close to exhausted as opponents.
+
+**Greedy (the top recommendation every time), 512 games, capped full rules, cancel cap 2:**
+
+| policy | avg placement | top-1 | top-4 |
+|---|---|---|---|
+| random | 7.94 | | |
+| f2 it 100 (simple rules, filter at inference only) | 5.78 ±0.21 (256 games, uncapped) | | |
+| f4 it 100 (cancel cap at inference only) | 3.35 ±0.16 | 19.1% | 72.9% |
+| f5 it 150 | 3.58 ±0.16 | 11.7% | 72.3% |
+
+`python scripts/evaluate.py runs/<run>/policy_XXXXX.pt --games 512 --threads 1 --device cpu`
+(f4 with `--cancel-cap 2`). Greedy beats sampled by 0.3-0.5 places, so the single top
+recommendation is the policy's best play, which is what the overlay will show. Both 512-game
+runs finished in minutes once turns were capped.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
