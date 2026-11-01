@@ -17,6 +17,7 @@ input automation, no memory writing, read-only on the game's logs.
 | `scripts/evaluate.py` | Average placement vs the seven scripted bots, with a 95% interval |
 | `scripts/advise.py` | Recommendations for a saved state, or a simulated demo game |
 | `scripts/status.py` | Phone-sized progress summary of a run |
+| `scripts/diagnose.py` | Behaviour stats (warband size, tier, unspent gold by turn) that show learning before placement moves |
 
 ## Quick start
 Setup on Windows with an NVIDIA GPU: [docs/SETUP_WSL2.md](docs/SETUP_WSL2.md).

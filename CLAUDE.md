@@ -33,6 +33,8 @@ Power.log to suggest moves. Cranny plays every game himself.
 - Progress: `python scripts/status.py runs/<name>`
 - Evaluate: `python scripts/evaluate.py runs/<name>/policy_00100.pt --games 2000`
 - Advice demo: `python scripts/advise.py runs/<name>/latest.pt --demo --turn 6`
+- Is it learning? `python scripts/diagnose.py random runs/<name>/policy_00050.pt`
+  (placement vs bots lags far behind; warband size and tier by turn move first)
 
 ## Conventions
 - Training from scratch against scripted bots gives no signal (a fresh policy places 8th
