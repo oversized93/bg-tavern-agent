@@ -277,8 +277,35 @@ Mean over it 80-150 (8 evaluations): TavernBench value 0.35 (f5) vs 0.31 (h1), p
 snapshots (`runs/f5-caps/bench_curve.jsonl`); it is flat from it 20 on while its placement vs
 the bots goes from 6.27 to 4.08.
 
-h2 (the small 2.9M model, same recipe, lr 5e-4) was killed for memory at iteration 8 while h1
-ran beside it (~3.4 GB; the container has 8 GB); resumed alone with micro_batch 512.
+## 2026-11-01: small model (h2) vs tiny (f5) at equal iterations
+
+h2 = f5's recipe with `model=small` (2.9M), lr 5e-4 (f5: tiny, lr 1e-3), micro_batch 512,
+torch_threads 2. The first attempt was killed for memory at iteration 8 while h1 ran beside it
+(~3.4 GB; the container has 8 GB). Resumed alone, it reached iteration 85 before the 2-hour
+background limit stopped it (~80 s per iteration). Checkpoints to 80 are in runs/h2-small.
+
+| it | 10 | 20 | 30 | 40 | 50 | 60 | 70 | 80 |
+|---|---|---|---|---|---|---|---|---|
+| f5 vs bots (128 sampled) | 7.09 | 6.27 | 5.91 | 5.19 | 4.84 | 5.02 | 4.84 | 4.13 |
+| h2 vs bots (128 sampled) | 7.45 | 6.15 | 5.52 | 5.16 | 4.80 | 4.41 | 4.86 | 4.41 |
+| f5 TavernBench value / policy | 0.30 / 0.29 | 0.36 / 0.23 | 0.40 / 0.29 | 0.34 / 0.25 | 0.31 / 0.26 | 0.33 / 0.24 | 0.35 / 0.25 | 0.37 / 0.26 |
+| h2 TavernBench value / policy | 0.28 / 0.27 | 0.32 / 0.33 | 0.30 / 0.32 | 0.36 / 0.32 | 0.37 / 0.32 | 0.32 / 0.33 | 0.36 / 0.36 | 0.39 / 0.34 |
+
+Mean over it 40-80 (5 evaluations each):
+- vs bots: 4.73 (h2) vs 4.80 (f5), each ±0.35: the same.
+- TavernBench policy pick: 0.33 vs 0.25 (chance 0.24), h2 higher at all 5. The gain is in
+  economy (0.28 vs 0.08), positioning (0.34 vs 0.18) and targets (0.33 vs 0.23).
+- TavernBench value pick: 0.36 vs 0.34, mixed: positioning and selection up, economy
+  (0.05 vs 0.20) and targets (0.28 vs 0.41) down.
+- Positioning is scored by the value head in both modes, so it is one result, not two.
+
+So the bigger model is not faster against the bots per iteration, but its policy picks are
+above chance on TavernBench where the tiny model's are not. Confounded with the learning rate
+(5e-4 vs 1e-3) and only 80 iterations. It supports the full model in the 3070 recipe; nothing
+changes for full-01. full-01 (below; 8x more decisions per iteration, so iterations don't line
+up) has policy picks at 0.28-0.35 through it 130: the same band as h2 (0.32-0.36 from it 20),
+above f5 (0.23-0.29 through it 120). Every model size so far gets policy picks in a flat band from early on
+instead of rising with training.
 
 ## 2026-11-01: native Windows on the 3070
 
