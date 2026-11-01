@@ -211,6 +211,40 @@ def test_hybrid_opponents_seat_layout():
     assert trajs and all(1 <= place <= 8 for _, place in trajs)
 
 
+def _bench_dir():
+    import os
+
+    for d in (os.environ.get("TAVERNBENCH_DIR", ""), "~/AutoTavern/tavernbench",
+              "/root/deps/AutoTavern/tavernbench"):
+        if d and (Path(d).expanduser() / "tavernbench" / "engine.py").exists():
+            return Path(d).expanduser()
+    return None
+
+
+@pytest.mark.skipif(_bench_dir() is None, reason="no AutoTavern checkout (TAVERNBENCH_DIR)")
+def test_tavernbench_options_reproduce_labels(tmp_path):
+    """The adapter builds each option the way the labels were made: scoring the positions it
+    builds with TavernGym's own combat preview recovers the labelled best answer."""
+    from bgagent import tavernbench as TB
+
+    bench = _bench_dir()
+    engine, report = TB.import_bench(bench)
+    _, labels, states = TB.load_set(bench / "data" / "eval")
+    net = TavernNet(ModelConfig.preset("tiny"))
+    path = tmp_path / "p.pt"
+    torch.save({"model": net.state_dict(), "model_config": vars(net.cfg), "iteration": 0}, path)
+    sc = TB.Scorer(path, engine)
+    for tid in ("E3-000", "P3-000", "O4-000", "T2-000", "T5-000"):
+        opts = sc.options(states[tid])
+        assert len(opts) == len(states[tid].get("options", states[tid].get("perms")))
+        win = {json.dumps(o.answer): engine.preview(engine.from_state(o.states[-1]), 0, 1, n=512)
+               ["win"] for o in opts}
+        best = json.loads(max(win, key=win.get))
+        row = {"response": json.dumps({"answer": best})}
+        assert report.score_answer(labels[tid], row)[0] == 1, tid
+        assert sc.by_policy(opts) in [o.answer for o in opts]
+
+
 def test_action_names_match_pointer_layout():
     assert taverngym.action_name(L.A_PLAY + 3 * L.N_POS + 2).startswith("Play { hand: 3, pos: 2")
     assert taverngym.action_name(L.A_MAGNETIZE + 4 * L.N_BOARD + 5) == "Magnetize { hand: 4, board: 5 }"

@@ -210,6 +210,53 @@ Head to head between them: g1 among seven g2s 4.48 ±0.19; g2 among seven g1s 4.
   1.79 -> 1.46-1.54, tier at turn 8 3.39 -> 2.94 (g1) / 3.19 (g2), warband 6.8-6.9.
 - The bots aren't exhausted: it improved by 0.4 against them in these 100 iterations.
 
+## 2026-11-01: TavernBench, the outside check
+
+`bgagent/tavernbench.py` answers TavernBench's 23 decision scenarios (232 of the 368
+evaluation tasks: hero, trinket and discover picks, buys, arrangement, action order, targets,
+turn plans) from the network alone, and scores them with the benchmark's own `report` code
+(a category = mean of its scenarios; a total = mean over scenarios). Two ways to pick:
+- value: apply each option to a copy of the game, take the best value-head position.
+- policy: what the policy does with only the task's options open (its most likely next action
+  among those that keep an option alive). Hero choice and arrangement fall back to value.
+
+**The adapter is right.** Scoring the same option positions with TavernGym's combat preview
+(512 combats each) instead of the network gets 1.00 on all 18 next-combat scenarios (D3, D5,
+E3, O1-5, P1-5, T1-5), 104/104 option sets applied. `tests/test_core.py` keeps a 5-task version
+of this check (skipped without an AutoTavern checkout).
+
+**Results** (`python scripts/tavernbench.py <policy> --bench <AutoTavern>/tavernbench`):
+
+| system | decision (23) | select | econ | position | order | targets | strategy |
+|---|---|---|---|---|---|---|---|
+| chance | 0.24 | 0.30 | 0.12 | 0.20 | 0.21 | 0.25 | 0.25 |
+| TavernAgent (paper) | 0.89 | 0.64 | 1.00 | 0.97 | 1.00 | 0.97 | 0.75 |
+| Claude Sonnet 5.5 | 0.49 | 0.39 | 0.50 | 0.45 | 0.68 | 0.53 | 0.29 |
+| Claude Opus 5.5 | 0.46 | 0.41 | 0.50 | 0.33 | 0.60 | 0.53 | 0.38 |
+| Jev | 0.30 | 0.40 | 0.12 | 0.25 | 0.20 | 0.45 | 0.17 |
+| ours untrained, value / policy | 0.16 / 0.16 | | | | | | |
+| f4 it 100, value / policy | 0.31 / 0.27 | 0.30 / 0.31 | 0.12 / 0.12 | 0.17 / 0.17 | 0.50 / 0.35 | 0.35 / 0.25 | 0.21 / 0.36 |
+| g1 it 200, value / policy | 0.27 / 0.24 | 0.31 / 0.30 | 0.12 / 0.00 | 0.15 / 0.15 | 0.45 / 0.25 | 0.23 / 0.28 | 0.16 / 0.34 |
+| g2 it 200, value / policy | 0.31 / 0.30 | 0.39 / 0.35 | 0.12 / 0.25 | 0.15 / 0.15 | 0.53 / 0.30 | 0.25 / 0.38 | 0.18 / 0.38 |
+
+Most scenarios have 8 tasks, so per-category numbers are very noisy; the 23-scenario mean
+is about ±0.06.
+
+- **Our CPU models are near chance on the decisions TavernBench tests** (0.24-0.31 vs 0.24),
+  though they beat the scripted bots (2.94). They learned broad habits (fill the board,
+  spend the gold, level) and not card-specific tactics. Beating the bots is a weak proxy
+  for good play; TavernBench is now the main yardstick, and training logs it
+  (`bench_dir=...`, ~20 s for the tiny model on CPU).
+- The value head barely separates options within a turn: typically 0.01-0.1 expected places
+  between the best and worst option.
+- 18 of the 23 scenarios ask which option wins the next combat. The combat simulator answers
+  those perfectly. As a benchmark score that is circular, since it's how the labels were made.
+  As a tool it's legitimate: the overlay can simulate the next fight against the opponent's
+  last-seen board the way Bob's Buddy does. The other five (hero, trinket, discover for final
+  placement, turn plans) depend on long-term judgment that only training provides.
+- Hero (D1) and trinket (D2) labels are top human players' average placements. Even
+  TavernAgent gets 0.25 / 0.12 there.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.

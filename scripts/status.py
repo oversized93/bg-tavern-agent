@@ -18,6 +18,7 @@ def main():
     rows = [json.loads(x) for x in (run / "metrics.jsonl").read_text().splitlines() if x.strip()]
     train = [r for r in rows if "decisions" in r]
     evals = [r for r in rows if "eval_avg_placement" in r]
+    bench = [r for r in rows if "bench_value" in r]
     if not train:
         print("no iterations logged yet")
         return
@@ -43,6 +44,11 @@ def main():
         for r in evals[-8:]:
             print(f"  it {r['iteration']:4d}: {r['eval_avg_placement']:.2f} "
                   f"±{r['eval_ci95']:.2f}  top1 {r['eval_top1']:.2f}  top4 {r['eval_top4']:.2f}")
+    if bench:
+        print("TavernBench decisions (higher is better; chance 0.24, TavernAgent 0.89):")
+        for r in bench[-5:]:
+            print(f"  it {r['iteration']:4d}: value {r['bench_value']:.2f}  "
+                  f"policy {r['bench_policy']:.2f}")
     age = datetime.now() - datetime.strptime(last["time"], "%Y-%m-%d %H:%M:%S")
     if age.total_seconds() > max(3 * sec, 600):
         print(f"WARNING: no new iteration for {age}; the run may have stopped")

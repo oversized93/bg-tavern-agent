@@ -13,8 +13,10 @@ input automation, no memory writing, read-only on the game's logs.
 | `bgagent/model.py` | Entity transformer: one token per minion, hand card, shop offer, choice and opponent; pointer head over all 245 actions; value and placement heads |
 | `bgagent/ppo.py` | PPO over TavernGym's batched environment, self-play / league opponents, checkpoints and resume |
 | `bgagent/policy.py` | `Advisor`: ranked recommendations for any saved game state |
+| `bgagent/tavernbench.py` | Answers TavernBench's 23 decision scenarios with a policy, scored by the benchmark's own code |
 | `scripts/train.py` | Train (`--preset smoke / small / 3070`); rerun the same command to resume |
-| `scripts/evaluate.py` | Average placement vs the seven scripted bots, with a 95% interval |
+| `scripts/evaluate.py` | Average placement vs the seven scripted bots (or `--vs` another policy), with a 95% interval |
+| `scripts/tavernbench.py` | TavernBench decision accuracy, next to the paper's agent and the LLMs |
 | `scripts/advise.py` | Recommendations for a saved state, or a simulated demo game |
 | `scripts/status.py` | Phone-sized progress summary of a run |
 | `scripts/diagnose.py` | Behaviour stats (warband size, tier, unspent gold by turn) that show learning before placement moves |

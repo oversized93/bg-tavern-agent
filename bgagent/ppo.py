@@ -47,6 +47,9 @@ class TrainConfig:
     snapshot_every: int = 25  # iterations between policy snapshots (league + eval history)
     eval_every: int = 10  # iterations between evaluations against the scripted bots
     eval_games: int = 256
+    # TavernBench decision accuracy at every evaluation (bgagent/tavernbench.py): the path to
+    # AutoTavern's tavernbench/ folder, or "" to skip. About 20 s for the tiny model on CPU.
+    bench_dir: str = ""
     # Reward shaping: subtracted from the reward of every minion Move. Moves are free in the
     # game, so an untrained policy shuffles minions dozens of times a turn; 0 disables it.
     move_cost: float = 0.0
@@ -479,6 +482,19 @@ class Trainer:
                         self.tb.add_scalar(f"eval_vs_bots/{k}", r[k], self.it)
                 print(f"     eval vs bots: place {r['avg_placement']:.2f} ±{r['ci95']:.2f} "
                       f"top1 {r['top1']:.2f} top4 {r['top4']:.2f} ({r['games']} games)", flush=True)
+                if cfg.bench_dir:
+                    from .tavernbench import bench_eval
+
+                    b = bench_eval(self.model, cfg.bench_dir, self.run_dir / "tavernbench",
+                                   self.device)
+                    self.metrics.write(json.dumps({"iteration": self.it, **b}) + "\n")
+                    self.metrics.flush()
+                    if self.tb:
+                        for k in ("bench_value", "bench_policy"):
+                            self.tb.add_scalar(f"tavernbench/{k}", b[k], self.it)
+                    print(f"     TavernBench decisions: value {b['bench_value']:.2f}  "
+                          f"policy {b['bench_policy']:.2f}  (chance 0.24, TavernAgent 0.89)",
+                          flush=True)
             self.maybe_snapshot()
             if self.it % cfg.checkpoint_every == 0 or self.it == cfg.iterations:
                 self.save()

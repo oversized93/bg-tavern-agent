@@ -40,6 +40,16 @@ pytest -q
 python scripts/train.py --preset smoke --run runs/smoke
 ```
 
+TavernBench (the paper's test set) lives in the AutoTavern repository, not in the pip
+package. Clone it at the pinned commit to score policies on it and to track it during training:
+
+```bash
+git clone https://github.com/MCG-NJU/AutoTavern ~/AutoTavern
+git -C ~/AutoTavern checkout fb61201a557ddd36a411cf44aac51ce4d9b606ce
+python scripts/tavernbench.py runs/smoke/latest.pt --bench ~/AutoTavern/tavernbench
+# during training: add  --set bench_dir=~/AutoTavern/tavernbench  to train.py
+```
+
 ## 4. Before leaving it running for days
 - **Windows Update:** Settings > Windows Update > Pause updates (or set active hours), so it
   doesn't reboot mid-run.

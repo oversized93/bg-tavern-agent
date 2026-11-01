@@ -20,11 +20,14 @@ probabilities, while Cranny plays. Never automate play.
    past snapshots of our own policy (league) and TavernBench (phase 3). The bots are weak:
    TavernGym describes them as making games "varied, not strong".
 
-## Phase 3: measure against the paper (TavernBench)
-Adapter from TavernBench play tasks (`tavernbench/data/eval`, saved states via
-`Game.from_json`) to `Advisor`, mapping its top action into each task's answer format, then
-`tavernbench.report`. Gives a number directly comparable to TavernAgent's 91% and the LLMs'
-44-63%.
+## Phase 3: measure against the paper (TavernBench) - adapter done
+`bgagent/tavernbench.py` / `scripts/tavernbench.py` answer the 23 decision scenarios (232 of
+the 368 evaluation tasks) from the network alone and score them with TavernBench's own code.
+Checked: the same options scored by TavernGym's combat preview get 100%, so the options are
+built right. Training logs it with `bench_dir=...`. First results (NOTES.md, 2026-11-01): the
+CPU models are near chance (0.24-0.31 vs chance 0.24; TavernAgent 0.89, best LLM 0.49).
+Still open: the seven combat-fact scenarios (B1-B6, R2), which need the simulator, not the
+policy.
 
 ## Phase 4: live bridge (needs real logs)
 Power.log -> TavernGym game state -> `Advisor`.

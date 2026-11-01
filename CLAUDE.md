@@ -29,6 +29,9 @@ Power.log to suggest moves. Cranny plays every game himself.
   per-turn action limit unless `turn_action_caps` is set; ours cap every turn at 50.
 - `bgagent/policy.py`: `Advisor` - load a policy, give ranked actions for any saved game
   state. The live bridge will call this.
+- `bgagent/tavernbench.py`: answers TavernBench's 23 decision scenarios with a policy (value
+  head or constrained policy pick) and scores them with the benchmark's own code. Needs an
+  AutoTavern checkout at the pinned commit (`--bench`, `bench_dir`, `TAVERNBENCH_DIR`).
 - `scripts/`: train.py, evaluate.py, advise.py, status.py.
 
 ## Commands
@@ -38,6 +41,8 @@ Power.log to suggest moves. Cranny plays every game himself.
 - Progress: `python scripts/status.py runs/<name>`
 - Evaluate: `python scripts/evaluate.py runs/<name>/policy_00100.pt --games 2000`
 - Advice demo: `python scripts/advise.py runs/<name>/latest.pt --demo --turn 6`
+- TavernBench: `python scripts/tavernbench.py runs/<name>/policy_00100.pt --bench ~/AutoTavern/tavernbench`
+- Head to head: `python scripts/evaluate.py runs/b/policy_00200.pt --vs runs/a/policy_00100.pt`
 - Is it learning? `python scripts/diagnose.py random runs/<name>/policy_00050.pt`
   (placement vs bots lags far behind; warband size and tier by turn move first)
 
@@ -48,6 +53,8 @@ Power.log to suggest moves. Cranny plays every game himself.
   42 legal minion moves of a full board. See NOTES.md for the numbers.
 - Train on `rules=full`. The simplified-rules curriculum stage lost badly when evaluated
   on the real game (it never saw trinkets or Dark Gifts). Evaluation is always on `full`.
+- Beating the scripted bots is not playing well: the 2.94-vs-bots policy is near chance on
+  TavernBench. Report both.
 - Placement: 1 best, 8 worst. Reward: 1st = +1, 8th = -1, linear (TavernGym's).
 - TavernGym is pinned in pyproject.toml. Its card data is patch 36.6.3; live patches drift.
 - Long runs live in tmux inside WSL2. Never delete a run folder without asking.
