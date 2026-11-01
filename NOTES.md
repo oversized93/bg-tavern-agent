@@ -374,6 +374,30 @@ any optimizer step whose gradient norm isn't finite, logs `skipped`, and status.
 latest.pt (it 265) was clean (no non-finite tensors) and the run resumed from it at 15:4x;
 it 266-268 were rerun (status.py keeps the newest row per iteration).
 
+## 2026-11-01: where our recipe departs from the paper's
+
+The repo releases TavernGym and TavernBench only ("The trained TavernAgent, its weights and
+training code ... are not included"), so the paper (arXiv 2610.33845, HTML v1) is the only
+source for the method. Checked against it:
+- **Opponents: the paper never used self-play.** Section 6: "Rather than self-play, the learner
+  faces seven library seats." Appendix C: libraries "were first built from statistics of top
+  human players"; "each turn a library seat takes an entry that matches a target strength
+  curve"; later "recalibrated to the opponents the agent actually met on the client". Ours
+  (4 copies of itself + 4 scripted bots) is our own choice, and so is a league of snapshots.
+  Library seats would also explain why TavernAgent levels and ours doesn't: a seat that has a
+  top player's turn-8 board beats a tier-2 board flood.
+- **TavernBench combat and short-term answers use the simulator.** Section 7: "it applies each
+  option and simulates 256 combats after it (one-step lookahead)." So TavernAgent's 0.89 is
+  not network-only on those scenarios. Our combat-preview check (512 combats per option) gets
+  1.00 on the 18 next-combat scenarios; our network-only scores there are a stricter test than
+  the paper's. The remaining decisions (hero, trinket, the played-out D4/N1/N2) are the
+  network's job in both.
+- Live play: "the policy decides every operation, and a human presses the shortcut key the AI
+  names"; the paper doesn't say whether the lookahead was used live.
+- Scale: later stages are 300 iterations of ~1.05M decisions (~310M decisions, 570k games), lr
+  6e-6 -> 5e-6, entropy 0.002, aux placement 0.1, value 0.5, target KL 0.05, 18M parameters.
+  full-01 at it 268 has ~17.6M decisions in total.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
