@@ -48,6 +48,12 @@ So the reward reaches the policy and it is learning to fill its board, after abo
 the paper's per-stage budget. Tier at turn 8 hasn't risen yet (2.6-2.9), and gold is still
 left unspent; those are the next things to watch.
 
+The same run kept going to iteration 140 (~1.2M decisions, ~35 min on 2 CPU cores). Placement
+against the bots, 128 sampled games every 10 iterations:
+7.95, 7.92, 7.56, 7.54, 7.67, 7.58, 7.66, 7.40, 7.22, 7.42, 7.27, 7.20, 7.35, 7.32 (±0.2).
+Self-play alone moves it off the floor, slowly. The 3070 runs use a 40x bigger model and
+~50x more decisions per hour, so this is only a lower bound on the plumbing working.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
