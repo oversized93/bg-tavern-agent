@@ -22,6 +22,9 @@ Power.log to suggest moves. Cranny plays every game himself.
 - `bgagent/ppo.py`: rollout collection over BatchEnv (whole episodes, reward at the end),
   GAE, PPO update with bf16 autocast and gradient accumulation, checkpoints, league
   snapshots, periodic eval vs scripted bots.
+- `bgagent/filters.py`: narrows the legal mask so the top action can't loop (no Freeze while
+  frozen, at most 6 moves per turn). Used identically in training, eval and advice; the
+  settings are saved with the model.
 - `bgagent/policy.py`: `Advisor` - load a policy, give ranked actions for any saved game
   state. The live bridge will call this.
 - `scripts/`: train.py, evaluate.py, advise.py, status.py.
@@ -37,8 +40,10 @@ Power.log to suggest moves. Cranny plays every game himself.
   (placement vs bots lags far behind; warband size and tier by turn move first)
 
 ## Conventions
-- Training from scratch against scripted bots gives no signal (a fresh policy places 8th
-  nearly every game). Start in league/self-play; the bots are an evaluation yardstick.
+- Training from scratch against scripted bots alone gives no signal (a fresh policy places
+  8th nearly every game). Default is `opponents=mixed`: 4 learner seats + 4 scripted bots.
+- Default policy head is factored (action type, then target). The flat head drowns in the
+  42 legal minion moves of a full board. See NOTES.md for the numbers.
 - Placement: 1 best, 8 worst. Reward: 1st = +1, 8th = -1, linear (TavernGym's).
 - TavernGym is pinned in pyproject.toml. Its card data is patch 36.6.3; live patches drift.
 - Long runs live in tmux inside WSL2. Never delete a run folder without asking.

@@ -91,6 +91,26 @@ is unchanged. Test: a fresh policy on a full board puts >50% on moves with the f
 and <30% with the factored head (in practice ~1.5% of decisions are moves in early
 rollouts). Also added opponents=mixed: learner seats plus TavernGym's scripted bots.
 
+**Result: factored head + mixed opponents.** Same CPU settings, lr 1e-3, 100 iterations.
+Eval vs bots, 128 sampled games every 10 iterations (±0.2-0.3):
+
+| run | 10 | 20 | 30 | 40 | 50 | 60 | 70 | 80 | 90 | 100 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| e1 flat head, self-play | 7.80 | 7.78 | 7.40 | 7.35 | 7.39 | | | | | |
+| f1 factored, self-play | 7.43 | 7.27 | 7.15 | 7.22 | 7.02 | 6.89 | 6.93 | 6.79 | 6.92 | 7.00 |
+| f2 factored, mixed (4 learners + 4 bots) | 7.57 | 6.99 | 6.41 | 6.40 | 6.41 | 6.38 | 5.94 | 5.92 | 5.82 | 5.63 |
+
+f2 at it 100, 512 sampled games: 5.81 ±0.16, top-4 22.5%. f1 levels (tier 3.5-3.7 at turn 8)
+but plateaus near 6.9; f2 fills the board and levels less (tier 1.9-2.3 at turn 8) and is
+still improving at it 100. Presets now default to factored + mixed.
+
+**Greedy loops.** Taking f2's single top action every time (what a recommendation shows)
+loops: Freeze toggled again and again, and Move 1->0 repeated (a swap back and forth),
+each turn running to the 200-action cap. 6,000 greedy decisions: 97.5% moves, 5 End Turns.
+Fix: `bgagent/filters.py`, no Freeze while frozen and at most 6 moves per turn, applied the
+same way in training, evaluation, diagnostics and advice. Applied at inference only to f2
+(trained without it): greedy 5.78 ±0.21 over 256 games, matching sampled play.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
