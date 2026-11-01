@@ -63,6 +63,34 @@ per-action cost on moves.
 Self-play alone moves it off the floor, slowly. The 3070 runs use a 40x bigger model and
 ~50x more decisions per hour, so this is only a lower bound on the plumbing working.
 
+## 2026-10-31 (evening): why it stalls, and the action-space fix
+
+Three CPU runs, same settings as e0 except one change each, run in parallel (stopped early
+once the answer was clear). Eval vs bots, 128 sampled games every 10 iterations:
+
+| run | it 10 | 20 | 30 | 40 | 50 | notes |
+|---|---|---|---|---|---|---|
+| e0 baseline (lr 3e-4) | 7.95 | 7.92 | 7.56 | 7.54 | 7.67 | continued: 7.06, 7.15, 7.10, 7.03 at it 160-190 |
+| e1 lr 1e-3 | 7.80 | 7.78 | 7.40 | 7.35 | 7.39 | it 54: 35 actions/turn, 73% moves, tier 3.10 at turn 8 |
+| e2 move_cost 0.0005 | 7.95 | 7.81 | 7.58 | 7.66 | 7.59 | it 57: 27 actions/turn, 68% moves |
+
+e0 continued past 150 plateaued at ~7.05-7.15 while its minion shuffling grew to 88-116
+actions per turn, 82-88% of them moves. e1's higher learning rate is slightly ahead (within
+noise). A small move cost trims the shuffling but doesn't fix it.
+
+**Diagnosis.** With a full board there are 42 legal moves (7 x 6) against a handful of
+other actions, so a fresh policy puts most of its probability on moves, and the habit
+compounds. That breaks credit assignment: the reward comes only at game end, and with
+lambda = 0.995 the advantage reaches ~200 decisions back, which is two turns at 100 actions
+per turn. Leveling on turn 4 can't be connected to the result.
+
+**Fix: factored action head.** The policy now picks an action type first (end turn,
+refresh, freeze, upgrade, hero power, Dark Gift, cancel, buy, sell, activate, choose,
+play, magnetize, move), then the target. Same 245-way categorical, reparameterised, so PPO
+is unchanged. Test: a fresh policy on a full board puts >50% on moves with the flat head
+and <30% with the factored head (in practice ~1.5% of decisions are moves in early
+rollouts). Also added opponents=mixed: learner seats plus TavernGym's scripted bots.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
