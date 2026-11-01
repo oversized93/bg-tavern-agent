@@ -31,6 +31,9 @@ def main():
     ap.add_argument("--threads", type=int, default=4)
     ap.add_argument("--sample", action="store_true")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    ap.add_argument("--move-cap", type=int, help="override the policy's move cap (0 = off)")
+    ap.add_argument("--no-refreeze", type=int, choices=[0, 1],
+                    help="override the policy's no-refreeze rule")
     args = ap.parse_args()
 
     if args.policy == "random":
@@ -41,8 +44,16 @@ def main():
         targets = [(str(f), f) for f in files]
     for name, f in targets:
         model = load_policy(f, args.device)[0] if f is not None else None
+        rules = {}
+        if model is not None:
+            if args.move_cap is not None:
+                model.cfg.move_cap = args.move_cap
+            if args.no_refreeze is not None:
+                model.cfg.no_refreeze = bool(args.no_refreeze)
+            rules = {"move_cap": model.cfg.move_cap, "no_refreeze": model.cfg.no_refreeze}
         r = evaluate(model, args.games, args.parallel, args.threads, args.sample, args.device)
-        print(json.dumps({"policy": name, **r}), flush=True)
+        mode = "sampled" if args.sample else "greedy"
+        print(json.dumps({"policy": name, "mode": mode, **rules, **r}), flush=True)
 
 
 if __name__ == "__main__":

@@ -19,6 +19,7 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from bgagent.filters import ActionFilter  # noqa: E402
 from bgagent.policy import load_policy  # noqa: E402
 
 
@@ -29,13 +30,14 @@ def diagnose(policy, games, seed=20_000_003, sample=True):
     by_turn = defaultdict(lambda: defaultdict(list))
     actions_per_turn, finished = [], 0
     count = np.zeros(env.n_slots, int)
+    filt = ActionFilter.for_model(env.n_slots, policy)
     o = env.observe()
     while finished < games:
         r = o["ready"]
         acts = np.zeros(env.n_slots, np.int64)
         idx = np.nonzero(r)[0]
         if len(idx):
-            m = o["action_mask"][idx]
+            m = filt.apply(o["features"][idx], o["action_mask"][idx], idx)
             if policy is None:
                 a = np.array([rng.choice(np.nonzero(row)[0]) for row in m])
             else:
@@ -44,6 +46,7 @@ def diagnose(policy, games, seed=20_000_003, sample=True):
                 a = (torch.multinomial(torch.softmax(lg, -1), 1)[:, 0] if sample
                      else lg.argmax(-1)).numpy()
             acts[idx] = a
+            filt.record(idx, a)
             for j, i in enumerate(idx):
                 f = o["features"][i]
                 count[i] += 1

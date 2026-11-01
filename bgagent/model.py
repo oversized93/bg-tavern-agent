@@ -41,6 +41,9 @@ class ModelConfig:
     # moves on a full board swamp every other choice and the policy learns to shuffle.
     # Checkpoints saved before this option existed load with factored=False.
     factored: bool = True
+    # Action filter rules the policy is trained and used with (see filters.py).
+    move_cap: int = 6
+    no_refreeze: bool = True
 
     @staticmethod
     def preset(name: str) -> "ModelConfig":

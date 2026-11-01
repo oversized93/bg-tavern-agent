@@ -13,13 +13,15 @@ import taverngym
 import torch
 
 from . import layout as L
+from .filters import filter_mask
 from .model import ModelConfig, TavernNet
 
 
 def model_config_from(ck) -> ModelConfig:
-    """The model config saved in a checkpoint. Checkpoints from before the factored action
-    head have no `factored` key and were trained without it."""
-    return ModelConfig(**{"factored": False, **ck["model_config"]})
+    """The model config saved in a checkpoint. Keys added later default to what older
+    checkpoints were trained with: no factored head, no action filter."""
+    old = {"factored": False, "move_cap": 0, "no_refreeze": False}
+    return ModelConfig(**{**old, **ck["model_config"]})
 
 
 def load_policy(path, device="cpu"):
@@ -56,10 +58,14 @@ class Advisor:
         self.model, self.iteration = load_policy(policy_path, self.device)
 
     @torch.inference_mode()
-    def advise(self, state_json: str, seat: int = 0, top_k: int = 5):
+    def advise(self, state_json: str, seat: int = 0, top_k: int = 5, moves_this_turn: int = 0):
+        """`moves_this_turn`: minion moves already made this turn (the live bridge counts
+        them from the log); the policy was trained with a per-turn move cap."""
         f, c, m, ready = observe_state(state_json, seat)
         if not ready or not m[0].any():
             return {"ready": False, "actions": []}
+        cfg = self.model.cfg
+        m = filter_mask(f, m, [moves_this_turn], cfg.move_cap, cfg.no_refreeze)
         logits, value, place = self.model(
             torch.from_numpy(f).to(self.device),
             torch.from_numpy(c).to(self.device),

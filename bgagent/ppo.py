@@ -21,6 +21,7 @@ import torch.nn.functional as Fn
 
 from . import layout as L
 from .evaluation import evaluate
+from .filters import ActionFilter
 from .model import ModelConfig, TavernNet, param_count
 
 # Rule sets for the curriculum (the paper starts on simplified rules). Keys are TavernGym
@@ -58,6 +59,8 @@ class TrainConfig:
     move_cost: float = 0.0
     torch_threads: int = 0  # CPU threads for torch; 0 = torch's default
     factored: bool = True  # factored action head (see ModelConfig.factored)
+    move_cap: int = 6  # action filter (see filters.py): minion moves allowed per turn, 0 = off
+    no_refreeze: bool = True  # action filter: no Freeze while the shop is already frozen
     n_games: int = 128
     threads: int = 8
     decisions_per_iter: int = 65536
@@ -86,13 +89,17 @@ class TrainConfig:
             return TrainConfig(model="tiny", n_games=4, threads=2, decisions_per_iter=2048,
                                iterations=3, minibatch=1024, micro_batch=512, lr=3e-4,
                                lr_final=3e-4, checkpoint_every=1, eval_every=3, eval_games=16)
+        # Defaults from the CPU tests (NOTES.md, 2026-10-31): the factored head plus "mixed"
+        # opponents (4 learner seats, 4 scripted bots) beat every other setup by a wide
+        # margin. Learning rates for the bigger models are extrapolated, not yet tested.
         if name == "small":  # stage 1: fast iteration on simplified rules (hours)
-            return TrainConfig(model="small", rules="simple", n_games=32,
-                               learner_seats=tuple(range(8)), decisions_per_iter=32768,
-                               minibatch=4096, micro_batch=2048, lr=3e-4, lr_final=1e-4)
+            return TrainConfig(model="small", rules="simple", opponents="mixed", n_games=64,
+                               learner_seats=(0, 1, 2, 3), decisions_per_iter=32768,
+                               minibatch=4096, micro_batch=2048, lr=5e-4, lr_final=2e-4)
         if name == "3070":  # the multi-day run on an 8 GB card
-            return TrainConfig(model="full", n_games=32, decisions_per_iter=65536,
-                               minibatch=8192, micro_batch=2048)
+            return TrainConfig(model="full", opponents="mixed", n_games=64,
+                               learner_seats=(0, 1, 2, 3), decisions_per_iter=65536,
+                               minibatch=8192, micro_batch=2048, lr=3e-4, lr_final=1e-4)
         raise KeyError(name)
 
 
@@ -133,6 +140,7 @@ class Collector:
         self.open = [[] for _ in range(n)]
         self.obs = self.env.observe()
         self.opponent = None  # frozen model for league seats
+        self.filter = None  # built from the model's filter settings on first collect
         self.stats_reset()
 
     def stats_reset(self):
@@ -162,17 +170,21 @@ class Collector:
             o = self.obs
             ready = o["ready"]
             actions = np.zeros(env.n_slots, dtype=np.int64)
+            if self.filter is None:
+                self.filter = ActionFilter.for_model(env.n_slots, model)
             lr_idx = np.nonzero(ready & self.learner)[0]
             if len(lr_idx):
-                a, lp, v = act(model, o["features"][lr_idx], o["cards"][lr_idx],
-                               o["action_mask"][lr_idx], self.device, self.amp)
+                lm = self.filter.apply(o["features"][lr_idx], o["action_mask"][lr_idx], lr_idx)
+                a, lp, v = act(model, o["features"][lr_idx], o["cards"][lr_idx], lm,
+                               self.device, self.amp)
+                self.filter.record(lr_idx, a)
                 actions[lr_idx] = a
                 for j, i in enumerate(lr_idx):
                     f, aj = o["features"][i], int(a[j])
                     is_move = aj >= L.A_MOVE
                     self.open[i].append([
                         f.astype(np.float16), o["cards"][i].astype(np.int16),
-                        np.packbits(o["action_mask"][i]), aj, float(lp[j]),
+                        np.packbits(lm[j]), aj, float(lp[j]),
                         float(v[j]), -cfg.move_cost if is_move else 0.0,
                     ])
                     self.n_actions += 1
@@ -184,9 +196,10 @@ class Collector:
                             self.end_turn[t].append((f[33] * 7, f[10] * 6, f[7] * 10))
             op_idx = np.nonzero(ready & ~self.learner)[0]
             if len(op_idx):
+                om = self.filter.apply(o["features"][op_idx], o["action_mask"][op_idx], op_idx)
                 a, _, _ = act(self.opponent or model, o["features"][op_idx],
-                              o["cards"][op_idx], o["action_mask"][op_idx], self.device,
-                              self.amp)
+                              o["cards"][op_idx], om, self.device, self.amp)
+                self.filter.record(op_idx, a)
                 actions[op_idx] = a
             rewards, dones, info = env.step(actions)
             self.rejected += int((info["rejected"] & self.learner).sum())
@@ -310,6 +323,8 @@ class Trainer:
         self.device = pick_device(cfg.device)
         mcfg = ModelConfig.preset(cfg.model)
         mcfg.factored = cfg.factored
+        mcfg.move_cap = cfg.move_cap
+        mcfg.no_refreeze = cfg.no_refreeze
         latest = self.run_dir / "latest.pt"
         if latest.exists():  # resume with the architecture the run was started with
             from .policy import model_config_from

@@ -113,6 +113,31 @@ def test_fresh_factored_policy_does_not_favour_moves():
     assert move_share[False] > 0.5 and move_share[True] < 0.3
 
 
+def test_action_filter_rules():
+    from bgagent.filters import F_FROZEN, F_TURN, ActionFilter
+
+    feats = np.zeros((2, L.OBS_FLOATS), np.float32)
+    feats[:, F_TURN] = 0.25
+    feats[0, F_FROZEN] = 1.0
+    mask = np.zeros((2, L.N_ACTIONS), bool)
+    mask[:, [L.A_END, L.A_FREEZE, L.A_MOVE + 1, L.A_MOVE + 7]] = True
+    filt = ActionFilter(2, move_cap=2, no_refreeze=True)
+    idx = np.array([0, 1])
+    m = filt.apply(feats, mask, idx)
+    assert not m[0, L.A_FREEZE] and m[1, L.A_FREEZE]  # frozen shop: no re-freeze
+    filt.record(idx, [L.A_MOVE + 1, L.A_MOVE + 1])
+    filt.record(idx, [L.A_MOVE + 7, L.A_END])
+    m = filt.apply(feats, mask, idx)
+    assert not m[0, L.A_MOVE :].any() and m[1, L.A_MOVE :].any()  # cap hit for slot 0 only
+    feats[:, F_TURN] = 0.30  # next turn: counters reset
+    assert filt.apply(feats, mask, idx)[0, L.A_MOVE :].any()
+    only_moves = np.zeros((1, L.N_ACTIONS), bool)
+    only_moves[0, L.A_MOVE + 1] = True
+    f1 = feats[:1].copy()
+    filt.moves[0] = 5
+    assert filt.apply(f1, only_moves, np.array([0])).any()  # never empties the mask
+
+
 def test_action_names_match_pointer_layout():
     assert taverngym.action_name(L.A_PLAY + 3 * L.N_POS + 2).startswith("Play { hand: 3, pos: 2")
     assert taverngym.action_name(L.A_MAGNETIZE + 4 * L.N_BOARD + 5) == "Magnetize { hand: 4, board: 5 }"

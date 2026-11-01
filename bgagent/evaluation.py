@@ -4,6 +4,8 @@ import numpy as np
 import taverngym
 import torch
 
+from .filters import ActionFilter
+
 EVAL_SEED = 10_000_019  # fixed and far from training seeds, so checkpoints are comparable
 
 
@@ -20,13 +22,14 @@ def evaluate(policy, games, n_parallel=64, threads=4, sample=False, device="cpu"
     rng = np.random.default_rng(seed)
     places, started = [], env.n_slots
     active = np.ones(env.n_slots, bool)
+    filt = ActionFilter.for_model(env.n_slots, policy)  # the rules the policy trained with
     o = env.observe()
     while len(places) < games:
         ready = o["ready"] & active
         actions = np.zeros(env.n_slots, np.int64)
         idx = np.nonzero(ready)[0]
         if len(idx):
-            m = o["action_mask"][idx]
+            m = filt.apply(o["features"][idx], o["action_mask"][idx], idx)
             if policy is None:
                 actions[idx] = [rng.choice(np.nonzero(row)[0]) for row in m]
             else:
@@ -39,6 +42,7 @@ def evaluate(policy, games, n_parallel=64, threads=4, sample=False, device="cpu"
                 else:
                     a = logits.argmax(-1)
                 actions[idx] = a.cpu().numpy()
+            filt.record(idx, actions[idx])
         _, dones, info = env.step(actions)
         for i in np.nonzero(dones & active)[0]:
             if info["placement"][i] > 0:
