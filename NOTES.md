@@ -1063,6 +1063,28 @@ Not run. Ladder: MMR per placement is not public; one calculator's model (west-g
 game data) has +96 / +68 / +40 / +14 for 1st-4th, i.e. linear, which the current reward already
 is. Revisit a first-place stage once the AI wins often and levels.
 
+**How does a tier-2 AI ever win? One trinket.** (Cranny: "That seems actually impossible ... can
+you give an example".) Scratchpad `trace_wins.py`: training lobbies as above, every seat's health,
+Tier and board at each turn start. Example (seed 20261103, Morchie, seat 2): Tier 1 to turn 7,
+2 to turn 13, 3 after; board total stats t8 152, t10 474, t12 1435, t14 4409, t16 15450, t17
+29926 (seven Tier 1-3 minions at ~2170/2100 each); the last library seat had 15480. 18 of the
+first 19 wins traced held **Weighted Gauntlet** (BG36_MagicItem_414, a Lesser Trinket: "At the
+end of your turn, give your minions +1/+1. (Doubles at the start of each turn!)"); every win's
+board grew ~1.8-2.0x per turn from turn 8, at Tier 2-3. Over 1536 AI games:
+
+| | Games | Placement | Top-1 | Top-4 |
+|---|---|---|---|---|
+| With Weighted Gauntlet | 88 (6%) | 2.35 | 0.455 | 0.88 |
+| Without | 1448 (94%) | 4.87 | 0.001 | 0.44 |
+
+The simulator's version matches the card text (X starts at 1, doubles each turn start, buffs
+every friendly minion at turn end). Real games agree it is strong: Firestone last patch,
+33,712 games, average placement 3.16, 3rd best of 233 trinkets with > 2000 games, picked 31% of
+the time when offered. So the AI's wins are almost all this one trinket, which buffs every
+minion whatever its Tier; without it the AI wins 1 game in 700, and its no-levelling boards
+can't keep up with the late real boards. Another reason a first-place reward would not teach
+levelling: it would mostly teach "take the Gauntlet".
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
