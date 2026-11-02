@@ -758,6 +758,21 @@ Table 7 (final stage, TA-23) against our config:
     live tool's lookahead must reseed shops and Discovers, not just combats.
   - TAVERNBENCH.md: the N1/N2 turn plans were "cut from natural games, each played out 128
     times", and the hero and trinket picks are scored against top human players.
+- Our setup against the docs (same day, Cranny: "anything else we may be handling differently
+  by mistake?"):
+  - Checked and fine. `rules=full` differs from TavernGym's defaults only in the 50-action
+    turn cap. lib-02 has no shaping (`move_cost` 0.0), as in the paper. Turn numbers line up:
+    the simulator's turn 1 is the first Recruit turn with 3 Gold; in the replays (300 games) the
+    winners are on Tier 1 at turn 1 (297) and Tier 2 at turn 2 (268), so there's no off-by-one.
+  - **A gap I hadn't recorded:** the real-board entries (`EntryBuilder`, replay.py) have
+    `hand: []`, `stats: {}`, `counters: []`, and the minions carry only card, stats, golden and
+    keywords: no magnetized cards, no added Deathrattles. The paper's entries have "its hand and
+    hidden counters". A winner's replay never shows an opponent's hand or counters, so this
+    can't be fully fixed. At equal total stats, our real-board opponents fight weaker than the
+    real ones (tokens summoned in combat miss the counter buffs, nothing starts combat from
+    hand, magnetic Deathrattles are missing). Scaling their stats to the target only partly
+    offsets it. Not measured yet. Measurable on the simulated library by stripping its hands and
+    counters and comparing combat win rates.
 
 For us: our hyperparameters are the paper's except volume, lr and the KL anchor. Volume is a
 gap of days to months on this PC, not years (one paper stage ~3 days, see the correction above).
