@@ -814,6 +814,15 @@ longer and almost never winning (2-3% first place on the exam). Its ladder never
 0 (it needs placement < 4.5; it sat at ~5.2): it trained only against median real boards (t8
 ~191, t10 ~851; the Perfect Games winners have 282 / 1,806).
 
+TavernBench `data/full` (Cranny asked, 2026-11-02): all 960 tasks; `data/eval` is the paper's
+368-task subset (8 per scenario, plus every D4/N1/N2 task). The released answers of the other
+systems cover eval only, so comparisons stay on eval. For our 23 scenarios full has 552 tasks
+against eval's 232 (24 per scenario, so hero and trinket go from 8 to 24; D4/N1/N2 have no
+more). lib-02 it 275 on full (`--set .../data/full --compare ""`): decision 0.28 policy / 0.85
+lookahead, long-term 0.36; D1 hero 0.58 (eval: 0.50), D2 0.25, D4 0.44, N1 0.31, N2 0.22. Not for
+training: hero and trinket labels are top human players' picks (imitation), the rest would
+train on the benchmark, and the paper trained on neither.
+
 **Options added (2026-11-02), off by default:** `placement_utility` (the end reward for
 places 1..8; () = linear) and `anchor_coef` / `anchor_iters` (the paper's KL anchor to
 `init_from`). Tests: `test_placement_utility`, `test_anchor_kl`. Smoke run with both on: the
