@@ -62,3 +62,10 @@ Power.log to suggest moves. Cranny plays every game himself.
   resumes it in its own window. GPU memory: Windows spills into system RAM instead of failing
   (5x slower); training caps PyTorch at 80% of VRAM and the 3070 uses micro_batch=512.
 - Never delete a run folder without asking.
+- Human data (Firestone and HSReplay stats, Cranny's own game logs) only calibrates opponents and
+  evaluation, as the paper did. Never train the policy on human moves (no imitation learning):
+  Cranny's decision, to stay with the paper's method.
+- Firestone's public stats endpoints (`static.zerotoheroes.com/api/bgs/...`, the files its app
+  loads) are allowed for data collection per its developer; its ToS licenses personal,
+  non-commercial use. Keep request rates human-like, cache downloads under `data/` (not in git),
+  never redistribute the raw files, and credit Firestone.

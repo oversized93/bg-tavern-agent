@@ -1,4 +1,5 @@
 runs/
+data/
 *.pt
 *.pt.tmp
 __pycache__/

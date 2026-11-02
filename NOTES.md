@@ -398,6 +398,43 @@ source for the method. Checked against it:
   6e-6 -> 5e-6, entropy 0.002, aux placement 0.1, value 0.5, target KL 0.05, 18M parameters.
   full-01 at it 268 has ~17.6M decisions in total.
 
+## 2026-11-01: Firestone's public stats, and how far our agent is from top players
+
+Firestone's app loads its Battlegrounds meta stats from static files (from its open-source code,
+`libs/battlegrounds/...`): `static.zerotoheroes.com/api/bgs/hero-stats/mmr-{100,50,25,10,1}/
+{last-patch,past-three,past-seven,all-time}/overview-from-hourly.gz.json`, plus `card-stats`
+(same MMR folders), `trinket-stats`, `quest-stats`, `comp-stats` and an MMR-percentile table.
+Its developer allows collecting from them (per their Discord, relayed by Cranny); its ToS is a
+personal, non-commercial license. One sample of each, last patch:
+- hero-stats, top 1% MMR: 107 heroes, 22,840 player-games. Per hero: average position,
+  placement distribution, pick rate, tribe impact, and per turn `warbandStats` (average warband
+  total stats) and `combatWinrate`. The paper's "warband strength by turn" is right there.
+- card-stats, top 1%: 708 cards, 2.2M plays, each with plays and average placement by turn.
+  The Tavern upgrade buttons are listed but barely counted (1-2 plays), so the leveling curve
+  is not here; HSReplay Tier7's "When to Tavern Up" has it.
+- trinket-stats: 243 trinkets, pick rate and placement at each MMR percentile.
+- Every hero and trinket, and 702 of 708 cards, are in TavernGym's catalog (36.6.3.253932); the
+  6 missing are the Coin and Tavern buttons. The live pool matches the simulator.
+
+**Warband total stats by turn, top-1% humans (Firestone, hero-weighted) vs full-01 it 475**
+(128 sampled games vs bots, at each End Turn; scratchpad script `warband_curve.py`):
+
+| turn | 2 | 4 | 6 | 7 | 8 | 10 | 12 | 14 |
+|---|---|---|---|---|---|---|---|---|
+| top 1% | 5.6 | 31.5 | 91.1 | 167.2 | 328.2 | 1,792.6 | 5,951.3 | 8,276.9 |
+| full-01 | 11.3 | 45.3 | 116.6 | 160.3 | 207.8 | 339.1 | 508.8 | 863.8 |
+| full-01 tier | 1.01 | 1.01 | 1.91 | 2.03 | 2.13 | 2.88 | 3.97 | 4.91 |
+
+Turn 1 agrees (3.9 vs 4.1), so the turns line up. Ours is ahead through turn 6 (it stays on
+tier 1 until turn 5 and spends everything on minions), even at 7, then falls behind: 0.63x at
+turn 8, 0.19x at 10, 0.09x at 12. That is the board flood, measured against people: it buys an
+early lead that the bots can't punish, and never builds the late game top players have. The
+bots presumably sit even lower (not measured yet). This curve, per MMR bracket, is the target
+strength curve for library opponents.
+
+Decision (Cranny): no training on human moves; human data calibrates opponents and evaluation
+only, as in the paper.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
