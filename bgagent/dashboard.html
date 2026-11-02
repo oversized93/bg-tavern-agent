@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Training Watch</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --s1: #2a78d6; --s2: #eb6834;
+  --good: #0ca30c; --warning: #fab219; --good-text: #006300; --warn-text: #8a5a00;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --s1: #3987e5; --s2: #d95926; --good-text: #0ca30c; --warn-text: #fab219;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --s1: #3987e5; --s2: #d95926; --good-text: #0ca30c; --warn-text: #fab219;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 20px; margin: 0; font-weight: 600; }
+.sub { color: var(--ink2); font-size: 13px; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 12px 0 8px; }
+.controls label { color: var(--ink2); font-size: 13px; display: flex; gap: 6px; align-items: center; }
+select { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 5px 8px; max-width: 46vw; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--ink2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.lk { display: inline-block; width: 16px; height: 2px; border-radius: 1px; }
+.lk.s1, .key.s1 { background: var(--s1); } .lk.s2, .key.s2 { background: var(--s2); }
+.status { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin: 4px 0 12px; font-size: 13px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.pill .icon { font-size: 12px; } .pill.good .icon { color: var(--good); } .pill.warn .icon { color: var(--warning); }
+.pill.good { color: var(--good-text); } .pill.warn { color: var(--warn-text); }
+.boot { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px;
+  margin-bottom: 12px; font-size: 13px; color: var(--ink2); }
+.boot b { color: var(--ink); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.tile .label { color: var(--ink2); font-size: 12px; }
+.tile .value { font-size: 24px; font-weight: 600; line-height: 1.25; }
+.tile .value small { font-size: 13px; font-weight: 400; color: var(--ink2); }
+.tile .note { color: var(--muted); font-size: 12px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); gap: 12px;
+  transition: opacity .2s; }
+body.loading .grid, body.loading .tiles { opacity: .55; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px 8px; min-width: 0; }
+.card-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; align-items: baseline; }
+.card h2 { font-size: 15px; margin: 0; font-weight: 600; }
+.card .what { color: var(--ink2); font-size: 12.5px; margin: 2px 0 6px; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { font: inherit; font-size: 12px; color: var(--ink2); background: transparent; border: 0;
+  padding: 3px 9px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button[aria-pressed="true"] { color: var(--ink); background: var(--grid); font-weight: 600; }
+.plot-wrap { position: relative; }
+.plot svg { display: block; touch-action: pan-y; outline: none; }
+.plot svg:focus-visible { outline: 2px solid var(--s1); outline-offset: 2px; border-radius: 4px; }
+.plot text { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.plot .endlabel { fill: var(--ink); font-weight: 600; }
+.plot .reflabel { fill: var(--ink2); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
+.grid-line { stroke: var(--grid); stroke-width: 1; }
+.axis-line { stroke: var(--axis); stroke-width: 1; }
+.ref-line { stroke: var(--muted); stroke-width: 1; }
+.cross { stroke: var(--muted); stroke-width: 1; }
+.line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.line.s1 { stroke: var(--s1); } .line.s2 { stroke: var(--s2); }
+.band.s1 { fill: var(--s1); } .band.s2 { fill: var(--s2); } .band { fill-opacity: .10; stroke: none; }
+.dot { stroke: var(--surface); stroke-width: 2; } .dot.s1 { fill: var(--s1); } .dot.s2 { fill: var(--s2); }
+.empty { color: var(--muted); font-size: 13px; padding: 30px 0; text-align: center; }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 9px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.12); white-space: nowrap; }
+.tip-h { color: var(--ink2); margin-bottom: 2px; }
+.tip-row { display: flex; align-items: center; gap: 6px; }
+.tip-row b { font-variant-numeric: tabular-nums; }
+.tip-row .tip-name { color: var(--ink2); }
+.key { display: inline-block; width: 12px; height: 2px; border-radius: 1px; }
+.foot { color: var(--muted); font-size: 12px; margin: 14px 0 4px; }
+details { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-top: 12px; }
+summary { cursor: pointer; font-weight: 600; }
+.tbl-wrap { overflow-x: auto; margin-top: 8px; }
+table { border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; width: 100%; }
+th, td { padding: 4px 8px; text-align: right; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th { color: var(--ink2); font-weight: 600; }
+th:first-child, td:first-child { text-align: left; }
+.err { color: var(--warn-text); font-weight: 600; margin: 8px 0; }
+label.chk { font-size: 13px; color: var(--ink2); display: inline-flex; gap: 6px; align-items: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Training watch</h1>
+  <div class="sub" id="cfg">Loading…</div>
+  <div class="controls">
+    <label>Run <select id="main"></select></label>
+    <label>Compare with <select id="cmp"></select></label>
+    <label class="chk"><input type="checkbox" id="full"> show all of the comparison run</label>
+  </div>
+  <div class="legend" id="legend"></div>
+  <div class="status" id="status"></div>
+  <div class="err" id="err" hidden></div>
+  <div class="boot" id="boot" hidden></div>
+  <div class="tiles" id="tiles"></div>
+  <div class="grid" id="charts"></div>
+  <details>
+    <summary>Numbers at every test (the selected run)</summary>
+    <div class="tbl-wrap"><table id="tbl"><thead></thead><tbody></tbody></table></div>
+  </details>
+  <div class="foot" id="foot">Updates every 30 seconds. Placement: 1 = first, 8 = last.</div>
+</div>
+<script>
+"use strict";
+const NS = "http://www.w3.org/2000/svg";
+const $ = s => document.querySelector(s);
+// Real winners' Tavern Tier by turn (Firestone's Perfect Games; same numbers as scripts/status.py).
+const WINNERS = { t4: 2.45, t6: 3.6, t8: 4.9, t10: 5.6 };
+const REFRESH_MS = 30000;
+let RUNS = [], MAIN = null, CMP = null, D = { main: null, cmp: null }, NOW = 0;
+const pref = load("bgdash", { exam: null, tier: "t8", bench: "bench_policy", full: false });
+
+function load(k, dflt) { try { return Object.assign(dflt, JSON.parse(localStorage.getItem(k) || "{}")); } catch (e) { return dflt; } }
+function save() { try { localStorage.setItem("bgdash", JSON.stringify(pref)); } catch (e) { /* private window */ } }
+function S(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function H(tag, cls, text, parent) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+const num = v => typeof v === "number" && isFinite(v);
+const f2 = v => num(v) ? v.toFixed(2) : "–";
+function pts(rows, key) { return rows.filter(r => num(r[key])).map(r => [r.iteration, r[key]]); }
+function band(rows, key, ciKey) {  // the 95% range around each value, as [round, low, high]
+  const c = ciKey || key + "_ci95";
+  return rows.filter(r => num(r[key]) && num(r[c])).map(r => [r.iteration, r[key] - r[c], r[key] + r[c]]);
+}
+function rolling(rows, key, n) {
+  const out = [], buf = [];
+  rows.forEach(r => {
+    if (!num(r[key])) return;
+    buf.push(r[key]); if (buf.length > n) buf.shift();
+    out.push([r.iteration, buf.reduce((a, b) => a + b, 0) / buf.length]);
+  });
+  return out;
+}
+function at(series, it) { const p = series.find(q => q[0] === it); return p ? p[1] : null; }
+function lastOf(series) { return series.length ? series[series.length - 1] : null; }
+function ago(sec) {
+  sec = Math.max(0, Math.round(sec));
+  if (sec < 90) return sec + " s";
+  const m = Math.round(sec / 60);
+  return m < 90 ? m + " min" : Math.floor(m / 60) + " h " + (m % 60) + " min";
+}
+function niceTicks(lo, hi, n) {
+  const span = (hi - lo) || 1, raw = span / Math.max(1, n);
+  const mag = Math.pow(10, Math.floor(Math.log10(raw))), e = raw / mag;
+  const step = (e >= 7.5 ? 10 : e >= 3.5 ? 5 : e >= 1.5 ? 2 : 1) * mag;
+  const out = [];
+  for (let v = Math.ceil(lo / step - 1e-9) * step; v <= hi + step * 1e-9; v += step) out.push(+v.toFixed(10));
+  return { ticks: out, step };
+}
+function tickText(v, step) { return step >= 1 ? String(Math.round(v)) : v.toFixed(step >= 0.1 ? 1 : 2); }
+
+// A line chart: x = training round, one y-axis, at most two series (the run and its comparison).
+function chart(box, spec) {
+  box.textContent = "";
+  const wrap = H("div", "plot-wrap", null, box);
+  const plot = H("div", "plot", null, wrap);
+  const tip = H("div", "tip", null, wrap); tip.hidden = true;
+  const series = spec.series.map(s => Object.assign({}, s, {
+    pts: s.pts.filter(p => p[0] <= spec.xMax), ci: (s.ci || []).filter(p => p[0] <= spec.xMax) }));
+  if (!series.some(s => s.pts.length)) { H("div", "empty", spec.empty || "No numbers yet.", plot); return; }
+  const W = Math.max(260, plot.clientWidth || box.clientWidth), PH = 180;
+  const M = { l: 38, r: 46, t: 10, b: 24 }, HT = PH + M.t + M.b;
+  const ys = [];
+  series.forEach(s => { s.pts.forEach(p => ys.push(p[1])); s.ci.forEach(p => ys.push(p[1], p[2])); });
+  (spec.ref || []).forEach(r => ys.push(r.y));
+  let lo = Math.min(...ys), hi = Math.max(...ys);
+  if (spec.fixed) { lo = Math.min(lo, spec.fixed[0]); hi = Math.max(hi, spec.fixed[1]); }
+  else { const pad = (hi - lo || Math.abs(hi) || 1) * 0.08; lo -= pad; hi += pad; }
+  const yt = niceTicks(lo, hi, 4);
+  const x = v => M.l + v / (spec.xMax || 1) * (W - M.l - M.r);
+  const y = v => spec.invert ? M.t + (v - lo) / (hi - lo) * PH : M.t + (hi - v) / (hi - lo) * PH;
+  const svg = S("svg", { width: W, height: HT, viewBox: `0 0 ${W} ${HT}`, role: "img", tabindex: 0,
+    "aria-label": spec.label + " (arrow keys step through rounds; full numbers in the table below)" }, plot);
+  yt.ticks.forEach(t => {
+    S("line", { x1: M.l, x2: W - M.r, y1: y(t), y2: y(t), class: "grid-line" }, svg);
+    S("text", { x: M.l - 6, y: y(t) + 4, "text-anchor": "end" }, svg).textContent = tickText(t, yt.step);
+  });
+  S("line", { x1: M.l, x2: W - M.r, y1: M.t + PH, y2: M.t + PH, class: "axis-line" }, svg);
+  niceTicks(0, spec.xMax, Math.max(2, Math.floor((W - M.l - M.r) / 70))).ticks.forEach(t => {
+    S("text", { x: x(t), y: M.t + PH + 17, "text-anchor": "middle" }, svg).textContent = t;
+  });
+  (spec.ref || []).forEach(r => S("line", { x1: M.l, x2: W - M.r, y1: y(r.y), y2: y(r.y), class: "ref-line" }, svg));
+  const P = p => x(p[0]).toFixed(1) + "," + y(p[1]).toFixed(1);
+  series.forEach(s => {
+    if (s.ci.length > 1) {
+      const top = s.ci.map(p => x(p[0]).toFixed(1) + "," + y(p[1]).toFixed(1));
+      const bot = s.ci.slice().reverse().map(p => x(p[0]).toFixed(1) + "," + y(p[2]).toFixed(1));
+      S("path", { d: "M" + top.join("L") + "L" + bot.join("L") + "Z", class: "band " + s.cls }, svg);
+    }
+  });
+  series.slice().reverse().forEach(s => {  // the selected run drawn last, on top
+    if (s.pts.length > 1) S("path", { d: "M" + s.pts.map(P).join("L"), class: "line " + s.cls }, svg);
+  });
+  (spec.ref || []).forEach(r => {  // labels above the data lines, haloed so a crossing line can't hide them
+    S("text", { x: M.l + 4, y: y(r.y) - 4, class: "reflabel" }, svg).textContent = r.label;
+  });
+  series.slice().reverse().forEach(s => {  // end dots, the selected run's on top
+    const e = lastOf(s.pts);
+    if (e) S("circle", { cx: x(e[0]), cy: y(e[1]), r: 4, class: "dot " + s.cls }, svg);
+  });
+  const placed = [];
+  series.forEach(s => {  // end values, the selected run's first
+    const e = lastOf(s.pts); if (!e) return;
+    const ly = y(e[1]) + 4;
+    if (placed.some(p => Math.abs(p - ly) < 13)) return;  // collides: the legend and tooltip carry it
+    placed.push(ly);
+    S("text", { x: x(e[0]) + 8, y: ly, class: "endlabel" }, svg).textContent = spec.fmt(e[1]);
+  });
+  // Hover / touch / keyboard: a crosshair snaps to the nearest round with a number.
+  const xs = [...new Set(series.flatMap(s => s.pts.map(p => p[0])))].sort((a, b) => a - b);
+  const look = series.map(s => new Map(s.pts.map(p => [p[0], p[1]])));
+  const lookCi = series.map(s => new Map(s.ci.map(p => [p[0], (p[2] - p[1]) / 2])));
+  const cross = S("line", { y1: M.t, y2: M.t + PH, class: "cross", visibility: "hidden" }, svg);
+  const hit = S("rect", { x: M.l, y: 0, width: W - M.l, height: M.t + PH, fill: "transparent" }, svg);
+  let cur = -1;
+  function show(i) {
+    cur = i; const xv = xs[i];
+    cross.setAttribute("x1", x(xv)); cross.setAttribute("x2", x(xv)); cross.setAttribute("visibility", "visible");
+    tip.textContent = "";
+    H("div", "tip-h", "Round " + xv, tip);
+    series.forEach((s, k) => {
+      const v = look[k].get(xv), c = lookCi[k].get(xv);
+      const row = H("div", "tip-row", null, tip);
+      H("span", "key " + s.cls, null, row);
+      H("b", null, v == null ? "–" : spec.fmt(v) + (c != null ? " ±" + c.toFixed(2) : ""), row);
+      H("span", "tip-name", s.name, row);
+    });
+    tip.hidden = false;
+    const tw = tip.offsetWidth, bx = x(xv);
+    tip.style.left = (bx + 12 + tw > W ? Math.max(0, bx - 12 - tw) : bx + 12) + "px";
+    tip.style.top = (M.t + 2) + "px";
+  }
+  function hide() { cross.setAttribute("visibility", "hidden"); tip.hidden = true; cur = -1; }
+  function near(ev) {
+    const r = svg.getBoundingClientRect(), px = (ev.clientX - r.left) * (W / r.width);
+    let best = 0, bd = Infinity;
+    xs.forEach((v, i) => { const d = Math.abs(x(v) - px); if (d < bd) { bd = d; best = i; } });
+    show(best);
+  }
+  hit.addEventListener("pointermove", near);
+  hit.addEventListener("pointerdown", near);
+  hit.addEventListener("pointerleave", hide);
+  svg.addEventListener("focus", () => show(xs.length - 1));
+  svg.addEventListener("blur", hide);
+  svg.addEventListener("keydown", ev => {
+    if (ev.key === "ArrowLeft") { show(Math.max(0, cur - 1)); ev.preventDefault(); }
+    if (ev.key === "ArrowRight") { show(Math.min(xs.length - 1, cur + 1)); ev.preventDefault(); }
+    if (ev.key === "Escape") hide();
+  });
+}
+
+// One card: title, plain-language note, optional toggle, chart.
+function card(parent, title, what, toggle) {
+  const c = H("section", "card", null, parent);
+  const head = H("div", "card-head", null, c);
+  H("h2", null, title, head);
+  if (toggle) {
+    const seg = H("div", "seg", null, head);
+    seg.setAttribute("role", "group"); seg.setAttribute("aria-label", title + ": choose");
+    toggle.options.forEach(([val, label]) => {
+      const b = H("button", null, label, seg);
+      b.type = "button";
+      b.setAttribute("aria-pressed", String(val === toggle.value));
+      b.addEventListener("click", () => { toggle.pick(val); save(); render(); });
+    });
+  }
+  const w = H("p", "what", what, c);
+  const box = H("div", null, null, c);
+  return { box, what: w };
+}
+
+function seriesFor(fn) {
+  const out = [{ name: MAIN, cls: "s1", ...fn(D.main.rows) }];
+  if (D.cmp) out.push({ name: CMP, cls: "s2", ...fn(D.cmp.rows) });
+  return out;
+}
+
+function speed(rows) {
+  const t = rows.filter(r => num(r.ts)).slice(-31), d = [];
+  for (let i = 1; i < t.length; i++) {
+    const dt = (t[i].ts - t[i - 1].ts) / Math.max(1, t[i].iteration - t[i - 1].iteration);
+    if (dt > 0 && dt < 600) d.push(dt);  // longer gaps: the run was stopped and resumed
+  }
+  return d.length ? d.reduce((a, b) => a + b, 0) / d.length : null;
+}
+
+function renderHeader() {
+  const m = D.main, cfg = m.config, rows = m.rows;
+  const lastT = [...rows].reverse().find(r => num(r.ts)) || {};
+  const it = lastT.iteration || 0, total = cfg.iterations || 0;
+  const sec = speed(rows);
+  $("#cfg").textContent = [cfg.model && cfg.model + " model", cfg.opponents && "opponents: " + cfg.opponents,
+    cfg.learner_seats && cfg.learner_seats.length + " learning seats", cfg.rules && "rules: " + cfg.rules]
+    .filter(Boolean).join(" · ");
+  const lg = $("#legend"); lg.textContent = "";
+  [[MAIN, "s1"], [CMP, "s2"]].forEach(([n, c]) => {
+    if (!n) return;
+    const s = H("span", null, null, lg); H("i", "lk " + c, null, s); s.appendChild(document.createTextNode(n));
+  });
+  const st = $("#status"); st.textContent = "";
+  const age = NOW - (lastT.ts || 0), limit = Math.max(3 * (sec || 60), 600);
+  let pill;
+  if (total && it >= total) pill = ["good", "✓", "Finished"];
+  else if (age <= limit) pill = ["good", "●", "Training"];
+  else pill = ["warn", "■", "No new round for " + ago(age) + ": stopped or stuck"];
+  const p = H("span", "pill " + pill[0], null, st);
+  H("span", "icon", pill[1], p); p.setAttribute("role", "status");
+  p.appendChild(document.createTextNode(pill[2]));
+  H("span", null, "round " + it + (total ? " of " + total : ""), st);
+  H("span", null, "last round " + ago(age) + " ago", st);
+  if (sec && total && it < total && pill[0] === "good") {
+    const eta = (total - it) * sec, done = new Date((NOW + eta) * 1000);
+    const when = done.toLocaleString([], eta > 20 * 3600 ? { weekday: "short", hour: "numeric", minute: "2-digit" }
+      : { hour: "numeric", minute: "2-digit" });
+    H("span", null, "~" + Math.round(sec) + " s per round · done around " + when, st);
+  }
+  const boot = $("#boot");
+  const lc = cfg.level_curve || [];
+  if (lc.length) {
+    const last = [...rows].reverse().find(r => num(r.level_force)) || {};
+    boot.hidden = false; boot.textContent = "";
+    H("b", null, "Levelling bootcamp on. ", boot);
+    boot.appendChild(document.createTextNode(
+      "Upgrade is forced while it is behind real winners' Tier schedule (" +
+      lc.map(([t, k]) => "Tier " + k + " by turn " + t).join(", ") + ") in " +
+      (num(last.level_force) ? Math.round(last.level_force * 100) + "%" : "–") + " of games, " +
+      f2(last.forced_upgrades_per_game) + " forced Upgrades a game. Its tests play with the bootcamp on too."));
+  } else boot.hidden = true;
+}
+
+function tile(parent, label, value, small, note) {
+  const t = H("div", "tile", null, parent);
+  H("div", "label", label, t);
+  const v = H("div", "value", value, t);
+  if (small) { v.appendChild(document.createTextNode(" ")); H("small", null, small, v); }
+  if (note) H("div", "note", note, t);
+}
+
+function compareNote(key, it, fmt) {
+  if (!D.cmp || it == null) return null;
+  const v = at(pts(D.cmp.rows, key), it);
+  return v == null ? CMP + " has no number at round " + it : CMP + " at round " + it + ": " + fmt(v);
+}
+
+function examKeys() {
+  const keys = new Set();
+  D.main.rows.forEach(r => Object.keys(r).forEach(k => { if (/^exam_d[\d.]+$/.test(k)) keys.add(k); }));
+  return [...keys].sort((a, b) => parseFloat(a.slice(6)) - parseFloat(b.slice(6)));
+}
+
+function renderTiles() {
+  const rows = D.main.rows, el = $("#tiles"); el.textContent = "";
+  const ex = lastOf(pts(rows, "exam_d0")), exCi = lastOf(band(rows, "exam_d0"));
+  tile(el, "Real-board test (d0)", ex ? f2(ex[1]) : "–", exCi ? "±" + ((exCi[2] - exCi[1]) / 2).toFixed(2) : "",
+    ex ? "round " + ex[0] + (compareNote("exam_d0", ex[0], f2) ? " · " + compareNote("exam_d0", ex[0], f2) : "") : "every 10 rounds");
+  const bo = lastOf(pts(rows, "eval_avg_placement"));
+  tile(el, "Against the scripted bots", bo ? f2(bo[1]) : "–", null,
+    bo ? "round " + bo[0] + (compareNote("eval_avg_placement", bo[0], f2) ? " · " + compareNote("eval_avg_placement", bo[0], f2) : "") : "every 10 rounds");
+  const tr = lastOf(rolling(rows, "avg_placement", 10));
+  const df = lastOf(pts(rows, "difficulty"));
+  tile(el, "Training games (last 10)", tr ? f2(tr[1]) : "–", null,
+    df ? "opponent difficulty " + f2(df[1]) : null);
+  const t8 = lastOf(pts(rows, "tier_t8"));
+  tile(el, "Tier on turn 8", t8 ? f2(t8[1]) : "–", null, "real winners " + WINNERS.t8);
+  const bp = lastOf(pts(rows, "bench_policy"));
+  tile(el, "TavernBench (its own picks)", bp ? f2(bp[1]) : "–", null, "chance 0.24 · paper's agent 0.89");
+}
+
+function renderCharts() {
+  const el = $("#charts"); el.textContent = "";
+  const mainMax = Math.max(10, ...D.main.rows.map(r => r.iteration));
+  const cmpMax = D.cmp ? Math.max(0, ...D.cmp.rows.map(r => r.iteration)) : 0;
+  const xMax = pref.full ? Math.max(mainMax, cmpMax) : mainMax;
+  const bootNote = (D.main.config.level_curve || []).length ? " " + MAIN + " plays these with the bootcamp on." : "";
+  // Lay out every card first, then draw: a chart measures its card's width, which is only final
+  // once the whole grid exists (a lone first card spans the full row).
+  const todo = [], draw = (box, spec) => todo.push([box, spec]);
+
+  const ek = examKeys();
+  if (!ek.includes(pref.exam)) pref.exam = ek[0] || "exam_d0";
+  const dname = k => "d" + k.slice(6);
+  let c = card(el, "Real-board test",
+    "Average place against real players' boards it never trained on (d0 = the library's typical board, " +
+    "d1 = all players' average, d5 = top 1%). 4.5 = even with them. Higher on the chart = better; " +
+    "the shading is the 95% range." + bootNote,
+    { options: ek.map(k => [k, dname(k)]), value: pref.exam, pick: v => { pref.exam = v; } });
+  draw(c.box, { label: "Real-board test " + dname(pref.exam), invert: true, fmt: f2, xMax,
+    series: seriesFor(r => ({ pts: pts(r, pref.exam), ci: band(r, pref.exam) })),
+    ref: [{ y: 4.5, label: "4.5 = even" }], empty: "No test yet: it runs every 10 rounds." });
+
+  c = card(el, "Against the scripted bots",
+    "Average place against TavernGym's seven built-in bots. 4.5 = as good as them; random play = 7.95. " +
+    "Beating the bots alone isn't playing well, so read it next to TavernBench." + bootNote);
+  draw(c.box, { label: "Against the scripted bots", invert: true, fmt: f2, xMax,
+    series: seriesFor(r => ({ pts: pts(r, "eval_avg_placement"), ci: band(r, "eval_avg_placement", "eval_ci95") })),
+    ref: [{ y: 4.5, label: "4.5 = as good as the bots" }], empty: "No test yet: it runs every 10 rounds." });
+
+  c = card(el, "Training games",
+    "Its own training lobbies, average of the last 10 rounds. Opponents get tougher whenever it does well, " +
+    "so this stays near 4.5 by design; the difficulty chart shows how tough they are. Higher = better.");
+  draw(c.box, { label: "Training games", invert: true, fmt: f2, xMax,
+    series: seriesFor(r => ({ pts: rolling(r, "avg_placement", 10) })) });
+
+  c = card(el, "Opponent difficulty",
+    "How strong the training opponents' boards are: 0 = the library's typical board, 1 = all players' " +
+    "average, 5 = top 1%. It moves up when it places well and down when it doesn't. Higher = tougher.");
+  draw(c.box, { label: "Opponent difficulty", fmt: f2, xMax,
+    series: seriesFor(r => ({ pts: pts(r, "difficulty") })), ref: [{ y: 0, label: "0 = typical board" }],
+    empty: "This run doesn't use library opponents." });
+
+  c = card(el, "Tavern Tier by turn",
+    "Average Tavern Tier at the end of the chosen turn in its training games. The grey line is real " +
+    "first-place players. Higher = levels faster.",
+    { options: [["t4", "turn 4"], ["t6", "turn 6"], ["t8", "turn 8"], ["t10", "turn 10"]], value: pref.tier,
+      pick: v => { pref.tier = v; } });
+  draw(c.box, { label: "Tavern Tier on " + pref.tier.replace("t", "turn "), fmt: f2, xMax, fixed: [1, 6],
+    series: seriesFor(r => ({ pts: pts(r, "tier_" + pref.tier) })),
+    ref: WINNERS[pref.tier] ? [{ y: WINNERS[pref.tier], label: "real winners " + WINNERS[pref.tier] }] : [] });
+
+  c = card(el, "TavernBench decisions",
+    "23 decision puzzles from the paper, scored by its own code. Own picks = what it would play; " +
+    "judgement = which result it rates best; with lookahead = judgement after simulating each option. " +
+    "Higher = better.",
+    { options: [["bench_policy", "own picks"], ["bench_value", "judgement"], ["bench_lookahead", "with lookahead"]],
+      value: pref.bench, pick: v => { pref.bench = v; } });
+  draw(c.box, { label: "TavernBench", fmt: f2, xMax,
+    series: seriesFor(r => ({ pts: pts(r, pref.bench) })),
+    ref: [{ y: 0.24, label: "chance 0.24" }, { y: 0.89, label: "paper's agent 0.89" }],
+    empty: "No TavernBench score yet: it runs every 10 rounds." });
+
+  c = card(el, "Choice variety (entropy)",
+    "How spread out its choices are. It falls slowly as it settles on its plays; a sudden drop can mean " +
+    "it stopped exploring.");
+  draw(c.box, { label: "Entropy", fmt: f2, xMax, series: seriesFor(r => ({ pts: pts(r, "ent") })) });
+  todo.forEach(([box, spec]) => chart(box, spec));
+}
+
+function renderTable() {
+  const rows = D.main.rows, ek = examKeys();
+  const roll = new Map(rolling(rows, "avg_placement", 10));
+  const cols = [["Round", r => r.iteration], ["Training (last 10)", r => f2(roll.get(r.iteration))],
+    ["Difficulty", r => f2(r.difficulty)], ...ek.map(k => ["Real-board d" + k.slice(6), r => f2(r[k])]),
+    ["Bots", r => f2(r.eval_avg_placement)], ["Tier t8", r => f2(r.tier_t8)],
+    ["TavernBench", r => f2(r.bench_policy)], ["Entropy", r => f2(r.ent)]];
+  const th = $("#tbl thead"), tb = $("#tbl tbody");
+  th.textContent = ""; tb.textContent = "";
+  const hr = H("tr", null, null, th);
+  cols.forEach(([n]) => H("th", null, n, hr));
+  rows.filter(r => num(r.eval_avg_placement) || ek.some(k => num(r[k]))).reverse().forEach(r => {
+    const tr = H("tr", null, null, tb);
+    cols.forEach(([, f]) => H("td", null, String(f(r)), tr));
+  });
+}
+
+function render() {
+  if (!D.main) return;
+  renderHeader(); renderTiles(); renderCharts(); renderTable();
+  $("#full").checked = !!pref.full;
+  $("#full").parentElement.hidden = !D.cmp;
+}
+
+function fillSelect(sel, names, value, none) {
+  sel.textContent = "";
+  if (none) { const o = H("option", null, "nothing", sel); o.value = ""; }
+  names.forEach(n => { const o = H("option", null, n, sel); o.value = n; });
+  sel.value = value || "";
+}
+
+async function getJSON(u) {
+  const r = await fetch(u, { cache: "no-store" });
+  if (!r.ok) throw new Error(u + ": " + r.status);
+  return r.json();
+}
+
+let busy = false;
+async function refresh() {
+  if (busy) return; busy = true;
+  const dim = setTimeout(() => document.body.classList.add("loading"), 300);
+  try {
+    const list = await getJSON("/api/runs");
+    RUNS = list.runs.map(r => r.name); NOW = list.now;
+    const [hm, hc] = decodeURIComponent(location.hash.slice(1)).split(":");
+    MAIN = RUNS.includes(hm) ? hm : RUNS[0];
+    CMP = hc !== undefined ? (RUNS.includes(hc) && hc !== MAIN ? hc : null) : (RUNS.find(n => n !== MAIN) || null);
+    fillSelect($("#main"), RUNS, MAIN, false);
+    fillSelect($("#cmp"), RUNS.filter(n => n !== MAIN), CMP, true);
+    if (!MAIN) { $("#cfg").textContent = "No runs with a metrics.jsonl yet."; return; }
+    const [m, c] = await Promise.all([getJSON("/api/run/" + encodeURIComponent(MAIN)),
+      CMP ? getJSON("/api/run/" + encodeURIComponent(CMP)) : Promise.resolve(null)]);
+    D = { main: m, cmp: c }; NOW = m.now;
+    $("#err").hidden = true;
+    render();
+  } catch (e) {
+    $("#err").hidden = false;
+    $("#err").textContent = "Can't reach the dashboard server. Is its window still open? (" + e.message + ") Trying again in 30 s.";
+  } finally {
+    clearTimeout(dim); document.body.classList.remove("loading"); busy = false;
+  }
+}
+
+function go() { location.hash = encodeURIComponent($("#main").value) + ":" + encodeURIComponent($("#cmp").value); }
+// A new run gets the default comparison (the most recently updated other run).
+$("#main").addEventListener("change", () => { location.hash = encodeURIComponent($("#main").value); });
+$("#cmp").addEventListener("change", go);
+$("#full").addEventListener("change", e => { pref.full = e.target.checked; save(); render(); });
+window.addEventListener("hashchange", refresh);
+let rt;
+window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(render, 150); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+refresh();
+setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);
+</script>
+</body>
+</html>

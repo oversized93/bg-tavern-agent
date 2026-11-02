@@ -596,3 +596,29 @@ def test_forced_steps_get_no_policy_gradient():
     assert all(torch.isfinite(p).all() for p in net.parameters())
     b = build_batch([(traj(False), 1)], 1.0, 0.995)
     assert b["train_pi"].min() == 1
+
+
+def test_dashboard_reads_resumed_and_half_written_metrics(tmp_path):
+    """The dashboard keeps the newest attempt at an iteration and skips a half-written line."""
+    from bgagent.dashboard import Runs, load_rows
+
+    run = tmp_path / "r"
+    run.mkdir()
+    rows = [{"iteration": 1, "decisions": 9, "avg_placement": 5.0, "time": "2026-11-02 10:00:00",
+             "aux": 1.0},
+            {"iteration": 2, "decisions": 9, "avg_placement": 6.0, "time": "2026-11-02 10:01:00"},
+            {"iteration": 2, "eval_avg_placement": 7.0, "eval_ci95": 0.2},
+            # resumed from iteration 1's checkpoint: iteration 2 again, without its eval yet
+            {"iteration": 2, "decisions": 9, "avg_placement": 4.0, "time": "2026-11-02 11:00:00"}]
+    text = "\n".join(json.dumps(r) for r in rows) + '\n{"iteration": 3, "decis'
+    (run / "metrics.jsonl").write_text(text)
+    out = load_rows(run / "metrics.jsonl")
+    assert [r["iteration"] for r in out] == [1, 2]
+    assert out[1]["avg_placement"] == 4.0 and "eval_avg_placement" not in out[1]
+    assert "aux" not in out[0] and out[1]["ts"] - out[0]["ts"] == 3600
+    (run / "config.json").write_text(json.dumps({"iterations": 10, "lr": 1e-4}))
+    runs = Runs(tmp_path)
+    assert runs.get("r")["config"] == {"iterations": 10}
+    assert runs.summary()[0]["iteration"] == 2
+    with pytest.raises(KeyError):
+        runs.get("../r")

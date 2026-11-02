@@ -45,6 +45,9 @@ Power.log to suggest moves. Cranny plays every game himself.
   schedule and can afford Upgrade, it upgrades instead of acting; forced steps train the value
   head, not the policy. `level_curve`, `level_force`, `level_force_decay` (the hand-back).
   Evaluations use the same forcing.
+- `bgagent/dashboard.py` + `dashboard.html`: the live training dashboard. A standard-library web
+  server that reads runs/*/metrics.jsonl (newest attempt per iteration, like status.py) and one
+  self-contained page (hand-drawn SVG charts, no CDN) that compares two runs and redraws every 30 s.
 - `bgagent/human.py`: Firestone reference curves (warband strength by turn per MMR bracket),
   read from `data/firestone` (fetched by `scripts/fetch_firestone.py`, not in git).
 - `scripts/`: train.py, evaluate.py, advise.py, status.py, tavernbench.py, fetch_firestone.py,
@@ -56,6 +59,8 @@ Power.log to suggest moves. Cranny plays every game himself.
 - Smoke run: `python scripts/train.py --preset smoke --run runs/smoke`
 - Real run: `python scripts/train.py --preset 3070 --run runs/<name>` (resume = same command)
 - Progress: `python scripts/status.py runs/<name>`
+- Dashboard: `scripts\dashboard.cmd` (double-click) or `python scripts/dashboard.py` →
+  http://localhost:8050/#run:compare-run; `--lan` for a phone on the same Wi-Fi
 - Evaluate: `python scripts/evaluate.py runs/<name>/policy_00100.pt --games 2000`
 - Advice demo: `python scripts/advise.py runs/<name>/latest.pt --demo --turn 6`
 - TavernBench: `python scripts/tavernbench.py runs/<name>/policy_00100.pt --bench ~/AutoTavern/tavernbench`
