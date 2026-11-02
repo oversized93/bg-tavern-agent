@@ -551,6 +551,45 @@ better than even. Expected to settle where the learner places ~4.75. Its 81-90 h
 0.35 / 0.33. First climbs: it 93 (3.97) and it 94 (4.34) took d to 0.10. Turn-8 opponents barely
 change with d (d0 225 vs d1 230 at turn 8); the ladder bites from turn 10 on.
 
+## 2026-11-02: lib-01 at 300 iterations (~20M decisions), the review
+
+Training, per 30 iterations (placement against the library, at the d of the time):
+
+| its | 1-30 | 31-60 | 61-90 | 91-120 | 121-150 | 151-180 | 181-210 | 211-240 | 241-270 | 271-300 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| placement | 5.03 | 4.87 | 4.57 | 4.72 | 4.68 | 4.69 | 4.75 | 4.76 | 4.74 | 4.77 |
+| d at end | 0 | 0 | 0 | 0.05 | 0.10 | 0.15 | 0.20 | 0.25 | 0.20 | 0.20 |
+| tier at t8 | 2.13 | 2.07 | 2.04 | 2.04 | 2.04 | 2.03 | 2.02 | 2.02 | 2.01 | 2.01 |
+| entropy | 1.09 | 1.07 | 1.08 | 1.05 | 1.05 | 1.06 | 1.01 | 0.98 | 0.94 | 0.88 |
+
+- The ladder settled where predicted (placement ~4.75) but stopped climbing at d ~0.2 from
+  it ~190: after it 90, 26 iterations went up and 22 down. At d = 0.2 the turn-10 opponent is
+  488 (all players: 977), turn 12 885 (3,335).
+- vs bots, greedy, 1,000 games: **2.20 ±0.08**, top-1 0.35, top-4 0.95 (full-01 it 500:
+  2.88 ±0.09). Training evals fell 2.54 -> ~2.2 by it 230, flat after.
+- Head to head (greedy, 512 games): lib-01 it 300 among seven full-01 it-500s **3.41 ±0.19**.
+- Exam (never trained on): d0 4.56 -> best 3.54-3.61 (its 180-230) -> 3.76 at 300; d1 flat the
+  whole run (6.45-6.92); d5 flat (7.33-7.50).
+- TavernBench flat: value 0.27-0.36, policy 0.26-0.33 (0.34 / 0.30 at it 300).
+- Warband stats by turn (128 sampled games vs bots, scratchpad `warband_curve.py`):
+
+| turn | 6 | 8 | 10 | 12 | 14 |
+|---|---|---|---|---|---|
+| lib-01 it 300 | 122 | 238 | 479 | 743 | 1,191 |
+| lib-01 tier | 1.83 | 2.02 | 2.02 | 2.10 | 3.08 |
+| full-01 it 500 | 115 | 206 | 350 | 538 | 929 |
+| full-01 tier | 1.94 | 2.18 | 3.36 | 4.74 | 5.73 |
+| all players | 73 | 230 | 977 | 3,335 | 6,553 |
+
+  Boards ~37% stronger at turns 10-12 than full-01, but by levelling *less*: it now sits on
+  tier 2 from turn 7 to turn 12 and levels at 13 (the upgrade gets 1 Gold cheaper each turn it
+  waits). Against people it is 0.49x at turn 10 and 0.22x at turn 12.
+
+**Verdict:** library opponents beat the bots as teachers (2.88 -> 2.20 vs bots, 3.41 against
+its own start), but the learner found a cheaper local optimum, not the human one: at d ~0.2
+the late game never punishes a tier-2 board, and the ladder can't climb past where the learner
+holds even. The exam at d1 never moved.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
