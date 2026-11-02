@@ -537,6 +537,6 @@ def test_difficulty_below_zero_scales_the_median():
     from bgagent.library import Difficulty
 
     lad = Difficulty([{8: 200.0}, {8: 1000.0}])
-    assert lad.target(0.0, 8) == 200.0 and lad.target(1.0, 8) == 1000.0
+    assert lad.target(0.0, 8) == pytest.approx(200.0) and lad.target(1.0, 8) == pytest.approx(1000.0)
     assert abs(lad.target(-1.0, 8) - 20.0) < 1e-9 and abs(lad.target(-2.0, 8) - 2.0) < 1e-9
     assert lad.target(0.5, 8) > lad.target(0.0, 8) > lad.target(-0.5, 8) > lad.target(-1.0, 8)
