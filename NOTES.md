@@ -524,6 +524,26 @@ learner_seats=(0,), n_games 256, lr 2e-4 -> 1e-4 over 4,000, 300 iterations, exa
 d = 0 (library boards at their own median beat the learner: they never have an off turn),
 ~60 s per iteration (39-53 s rollout + 22 s update).
 
+**lib-01 check-in at it 78** (21:10): no crashes, no skipped steps, 1,600-1,930 dec/s.
+Training placement at d = 0, averaged per 10 iterations (256 games each, so ~±0.05):
+
+| its | 1-10 | 11-20 | 21-30 | 31-40 | 41-50 | 51-60 | 61-70 | 71-79 |
+|---|---|---|---|---|---|---|---|---|
+| placement | 5.07 | 5.06 | 4.96 | 4.87 | 4.93 | 4.80 | 4.57 | 4.61 |
+| top 4 | 0.38 | 0.38 | 0.40 | 0.41 | 0.39 | 0.42 | 0.47 | 0.45 |
+| tier at t8 | 2.15 | 2.12 | 2.13 | 2.08 | 2.05 | 2.07 | 2.05 | 2.03 |
+
+- It learns against its own median boards (5.07 -> 4.6), but d never left 0: the best single
+  iteration was 4.22 and the climb needs < 4.0. By construction d = 0 is the learner's former
+  self, so the up threshold asks it to beat that by half a place.
+- Nothing outside moved: bots 2.48-2.75 (full-01 ended 2.55 on the same sampled eval),
+  TavernBench value 0.31-0.35 / policy 0.28-0.32 (full-01: 0.37 / 0.33), exam d1 6.53-6.92,
+  d5 7.34-7.50. Exam d0 4.34-4.94 at ±0.47 (128 games) is too noisy to see a 0.4 change.
+- Tier at turn 8 keeps falling. At d = 0 the opponents are our own shape: stronger than
+  humans early (turn 6: 123 vs 73), equal at turn 8 (225 vs 230), far weaker late (turn 10:
+  396 vs 977). Flooding a tier-2 board is still the right answer to them; only climbing toward
+  the human curves makes the late game punish it.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
