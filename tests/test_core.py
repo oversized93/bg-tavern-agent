@@ -350,6 +350,104 @@ def test_update_skips_nonfinite_step():
     assert all(torch.isfinite(p).all() for p in net.parameters())
 
 
+def _random_until(env, turn, seed=0):
+    rng = np.random.default_rng(seed)
+    o = env.observe()
+    while True:
+        r = np.nonzero(o["ready"])[0]
+        if len(r) and o["features"][r[0]][1] == 0 and round(o["features"][r[0]][0] * 20) >= turn:
+            return o
+        acts = np.zeros(env.n_slots, np.int64)
+        for i in r:
+            acts[i] = rng.choice(np.nonzero(o["action_mask"][i])[0])
+        env.step(acts)
+        o = env.observe()
+
+
+def test_library_inject_roundtrip():
+    from bgagent.library import board_strength, inject, make_entry
+
+    env = taverngym.BatchEnv(1, seed=21, controlled=tuple(range(8)))
+    _random_until(env, 6)
+    s = json.loads(env.save(0))
+    g = s["game"]
+    src = max(range(8), key=lambda p: len(g["players"][p]["board"]))
+    entry = make_entry(g["players"][src], 5)
+    assert entry["board"] and entry["strength"] == board_strength(entry["board"])
+    dst = (src + 1) % 8
+    inject(g, dst, entry, scale=3.0)
+    env.load(0, json.dumps(s))
+    g2 = json.loads(env.save(0))["game"]
+    board = g2["players"][dst]["board"]
+    want = sum(max(1, round(m["atk"] * 3)) + max(1, round(m["hp"] * 3)) for m in entry["board"])
+    assert board_strength(board) == want and g2["players"][dst]["tier"] == entry["tier"]
+    assert all(m["pool_copies"] == 0 for m in board)
+    eids = [m["eid"] for p in g2["players"] for m in p["board"]]
+    assert len(eids) == len(set(eids))
+    _random_until(env, 9)  # the game keeps running with the injected board
+
+
+def test_library_seat_with_huge_board_wins():
+    from bgagent.library import Difficulty, Library, LibrarySeats
+
+    env = taverngym.BatchEnv(1, seed=5, controlled=tuple(range(8)))
+    o = _random_until(env, 2)
+    g = json.loads(env.save(0))["game"]
+    m = next(m for p in g["players"] for m in p["board"])
+    big = dict(m, atk=500, hp=500, max_hp=500, peak_atk=500, peak_hp=500)
+    lib = Library([{"turn": t, "strength": 7000, "tier": 1, "board": [big] * 7, "hand": [],
+                    "stats": {}, "counters": []} for t in range(1, 40)])
+    seats = LibrarySeats(env, (3,), lib, Difficulty([{1: 7000}]), sigma=0.0)
+    rng = np.random.default_rng(1)
+    final = {}
+    while len(final) < 8:
+        if seats.prepare(o):
+            o = env.observe()
+        acts = np.zeros(env.n_slots, np.int64)
+        idx = np.nonzero(o["ready"])[0]
+        lib_idx = idx[seats.mask[idx]]
+        acts[lib_idx] = seats.actions(o, lib_idx)
+        for i in idx[~seats.mask[idx]]:
+            acts[i] = rng.choice(np.nonzero(o["action_mask"][i])[0])
+        _, dones, info = env.step(acts)
+        for i in np.nonzero(dones)[0]:
+            final[int(i)] = int(info["placement"][i])
+        o = env.observe()
+    assert final[3] == 1
+    assert all(abs(given - 7000) <= 7 for rows in seats.given.values() for _, given in rows)
+
+
+def test_library_pick_and_difficulty():
+    from bgagent.library import Difficulty, Library
+
+    lib = Library([{"turn": 5, "strength": s, "tier": 1, "board": [], "hand": [], "stats": {},
+                    "counters": [], "tag": s} for s in (10, 100, 1000)])
+    entry, scale = lib.pick(5, 120, np.random.default_rng(0), k=64)
+    assert entry["tag"] == 100 and abs(scale - 1.2) < 1e-9
+    entry, _ = lib.pick(9, 900, np.random.default_rng(0), k=64)  # nearest turn the library has
+    assert entry["tag"] == 1000
+    d = Difficulty([{5: 100}, {5: 400}, {5: 1600}])
+    assert abs(d.target(0.5, 5) - 200) < 1e-6 and abs(d.target(2.0, 5) - 1600) < 1e-6
+    assert abs(d.target(9.0, 5) - 1600) < 1e-6  # clamped to the top rung
+
+
+def test_harvest_collects_entries():
+    from bgagent.library import board_strength, harvest
+
+    env = taverngym.BatchEnv(2, seed=8, controlled=(0, 1))
+    rng = np.random.default_rng(0)
+
+    def random_act(model, feats, cards, mask, idx):
+        return np.array([rng.choice(np.nonzero(m)[0]) for m in mask])
+
+    lib = harvest(env, lambda i: None, 2, random_act, per_turn_cap=50, keep_top=10)
+    assert len(lib) > 0 and min(lib.turns()) >= 1
+    for t in lib.turns():
+        for strength, js in lib.by_turn[t]:
+            e = json.loads(js)
+            assert e["turn"] == t and board_strength(e["board"]) == strength
+
+
 def test_advisor_on_saved_state(tmp_path):
     g = taverngym.Game(seed=5)
     while not (g.turn >= 3 and g.needs_action(0)):

@@ -459,6 +459,47 @@ Firestone's warband curve. TavernGym has no library-seat hook: `Game.debug` can 
 seats mean either rewriting seat boards in the saved state between turns or a small
 `set_board` addition to the engine. full-01 stays stopped at 500 until that is built.
 
+## 2026-11-01: library opponents (the paper's method, our gap-filling)
+
+Firestone stats for every bracket are in data/firestone (`scripts/fetch_firestone.py`, 18
+files, last patch). Warband total stats by turn, hero-weighted (`bgagent/human.py`):
+
+| turn | 6 | 8 | 10 | 12 | 14 |
+|---|---|---|---|---|---|
+| all players (bracket 100) | 73 | 230 | 977 | 3,335 | 6,553 |
+| top 50% (MMR >= 6,283) | 78 | 254 | 1,156 | 4,034 | 7,592 |
+| top 25% (>= 6,814) | 82 | 274 | 1,299 | 4,507 | 7,949 |
+| top 10% (>= 7,504) | 85 | 291 | 1,465 | 4,989 | 8,294 |
+| top 1% (>= 9,947) | 91 | 328 | 1,793 | 5,951 | 8,277 |
+| full-01 it 500 vs bots | 115 | 206 | 350 | 538 | 929 |
+
+Even the all-players curve has ~3x our board at turn 10 and ~6x at 12, so the ladder starts
+below the human curves.
+
+`bgagent/library.py` implements library seats. What the paper states, we follow; where it is
+silent (it publishes no code or library details), these are our choices:
+- A library seat is a controlled slot that only presses End Turn (random legal option when a
+  choice is forced). At each of its turn starts, its board, hand, Tier and the buff counters
+  cards read in combat (`COPY_STATS`) are replaced with an entry via BatchEnv save/load
+  (~2 ms each, 30-130 KB states). Hero, Health, damage and elimination are normal. Injected
+  minions get fresh eids and pool_copies = 0 (TavernGym's own convention for non-pool copies).
+  Checked: a seat given 7x 500/500 never lost Health or armor and finished 1st.
+- Entries are harvested from simulated games (`scripts/build_library.py`): every alive seat's
+  board at each turn start, labelled with the turn it fought. Per turn the 400 strongest are
+  always kept, the rest reservoir-sampled up to 2,000.
+- Pick: of 8 random entries for the turn, the closest to the target in log strength, its
+  stats scaled onto the target. Target = ladder curve at difficulty d times a log-normal
+  spread (sigma 0.25).
+- Ladder: d = 0 is the library's own median; 1-5 are Firestone's brackets 100/50/25/10/1%;
+  geometric interpolation between rungs. After each iteration d += 0.05 while the learner's
+  training placement < 4.0, d -= 0.05 while > 5.0.
+- Exam: a second library from other seeds and other snapshots, never trained on, evaluated at
+  fixed d (0, 1, 5) next to the bots and TavernBench.
+- New runs can start from a policy's weights (`init_from`), as the paper's stages did.
+
+Smoke test (tiny fresh model, 3 iterations): opponents got exactly their targets (t8 204/204,
+t12 543/543); a fresh policy places 8.00 against the library, as expected.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.

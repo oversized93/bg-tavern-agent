@@ -40,9 +40,28 @@ class TrainConfig:
     # every game there, so the reward barely varies and nothing is learned; start elsewhere.
     # "hybrid": the learner plays `learner_seats`, a frozen past snapshot plays
     # `snapshot_seats`, and the scripted bots play the rest. For when the bots get too easy.
+    # "library": the paper's opponents (bgagent/library.py). The learner plays `learner_seats`;
+    # every other seat is a library seat that fights with a board from `library_path`, picked
+    # to match a target strength curve. Difficulty d climbs a ladder: 0 = the library's own
+    # median board, 1-5 = Firestone's MMR brackets (all players, top 50/25/10/1%; fetch with
+    # scripts/fetch_firestone.py). After each iteration d moves by `difficulty_step`: up while
+    # the learner's average placement is below `difficulty_up`, down while above
+    # `difficulty_down`.
     opponents: str = "league"
     learner_seats: tuple = (0, 1, 2, 3)
     snapshot_seats: tuple = (4, 5)  # "hybrid" only
+    library_path: str = ""
+    exam_path: str = ""  # held-out library for evaluation, never trained on ("" = skip)
+    exam_difficulties: tuple = (0.0, 1.0, 5.0)  # library median, all players, top 1%
+    exam_games: int = 128
+    difficulty: float = 0.0  # starting d (a resumed run keeps its own)
+    difficulty_step: float = 0.05
+    difficulty_up: float = 4.0
+    difficulty_down: float = 5.0
+    library_sigma: float = 0.25  # spread of each turn's target strength (log-normal sigma)
+    # A new run starts from these policy weights (and their architecture) instead of random
+    # ones: the paper's later stages start from the previous stage. Ignored on resume.
+    init_from: str = ""
     league_size: int = 8  # snapshots kept as opponents
     snapshot_every: int = 25  # iterations between policy snapshots (league + eval history)
     eval_every: int = 10  # iterations between evaluations against the scripted bots
@@ -145,8 +164,9 @@ class Collector:
     def __init__(self, cfg: TrainConfig, device):
         self.cfg, self.device = cfg, device
         self.amp = device.type == "cuda"
-        league = cfg.opponents in ("league", "hybrid")
-        controlled = {"league": tuple(range(8)), "mixed": tuple(cfg.learner_seats),
+        league = cfg.opponents in ("league", "hybrid", "library")
+        controlled = {"league": tuple(range(8)), "library": tuple(range(8)),
+                      "mixed": tuple(cfg.learner_seats),
                       "hybrid": tuple(sorted(set(cfg.learner_seats) | set(cfg.snapshot_seats))),
                       "bots": (0,)}[cfg.opponents]
         self.env = taverngym.BatchEnv(cfg.n_games, seed=cfg.seed, controlled=controlled,
@@ -155,6 +175,17 @@ class Collector:
         k = len(controlled)
         seats = np.array([controlled[i % k] for i in range(n)])
         self.learner = np.isin(seats, cfg.learner_seats) if league else np.ones(n, bool)
+        self.library_seats = None
+        if cfg.opponents == "library":
+            from .library import Library, LibrarySeats, ladder
+
+            if not cfg.library_path:
+                raise ValueError("opponents=library needs library_path (scripts/build_library.py)")
+            lib = Library.load(cfg.library_path)
+            others = tuple(s for s in range(8) if s not in set(cfg.learner_seats))
+            self.library_seats = LibrarySeats(self.env, others, lib, ladder(lib),
+                                              d=cfg.difficulty, sigma=cfg.library_sigma,
+                                              seed=cfg.seed)
         self.open = [[] for _ in range(n)]
         self.obs = self.env.observe()
         self.opponent = None  # frozen model for league seats
@@ -166,6 +197,8 @@ class Collector:
         # behaviour at each learner End Turn, by turn: (warband size, Tavern Tier, gold left)
         self.end_turn = {t: [] for t in (4, 6, 8, 10)}
         self.n_actions, self.n_moves, self.n_end_turns = 0, 0, 0
+        if getattr(self, "library_seats", None) is not None:
+            self.library_seats.stats_reset()
 
     def behaviour(self):
         out = {}
@@ -178,6 +211,14 @@ class Collector:
             out["actions_per_turn"] = round(self.n_actions / self.n_end_turns, 1)
         if self.n_actions:
             out["move_frac"] = round(self.n_moves / self.n_actions, 3)
+        if self.library_seats is not None:  # what the opponents fought with, vs the target
+            for t in (4, 6, 8, 10, 12):
+                rows = self.library_seats.given.get(t)
+                if rows:
+                    tg, gv = np.mean(rows, 0)
+                    out[f"opp_target_t{t}"] = round(float(tg), 1)
+                    out[f"opp_given_t{t}"] = round(float(gv), 1)
+            out["difficulty"] = round(self.library_seats.d, 3)
         return out
 
     def collect(self, model):
@@ -186,6 +227,8 @@ class Collector:
         t0 = time.time()
         while n_dec < cfg.decisions_per_iter:
             o = self.obs
+            if self.library_seats is not None and self.library_seats.prepare(o):
+                o = self.obs = env.observe()  # library seats got this turn's boards
             ready = o["ready"]
             actions = np.zeros(env.n_slots, dtype=np.int64)
             if self.filter is None:
@@ -214,7 +257,9 @@ class Collector:
                         if t in self.end_turn:  # global floats: turn/20, tier/6, gold/10, board/7
                             self.end_turn[t].append((f[33] * 7, f[10] * 6, f[7] * 10))
             op_idx = np.nonzero(ready & ~self.learner)[0]
-            if len(op_idx):
+            if len(op_idx) and self.library_seats is not None:
+                actions[op_idx] = self.library_seats.actions(o, op_idx)
+            elif len(op_idx):
                 om = self.filter.apply(o["features"][op_idx], o["action_mask"][op_idx], op_idx)
                 a, _, _ = act(self.opponent or model, o["features"][op_idx],
                               o["cards"][op_idx], om, self.device, self.amp)
@@ -397,6 +442,14 @@ class Trainer:
         mcfg.cancel_cap = cfg.cancel_cap
         mcfg.combat_head = cfg.combat_coef > 0
         latest = self.run_dir / "latest.pt"
+        init = None
+        if not latest.exists() and cfg.init_from:
+            from .policy import model_config_from
+
+            init = torch.load(cfg.init_from, map_location="cpu", weights_only=False)
+            mcfg = model_config_from(init)
+            mcfg.move_cap, mcfg.no_refreeze = cfg.move_cap, cfg.no_refreeze
+            mcfg.cancel_cap = cfg.cancel_cap
         if latest.exists():  # resume with the architecture the run was started with
             from .policy import model_config_from
 
@@ -408,12 +461,24 @@ class Trainer:
                 raise ValueError("combat_coef > 0, but this run's model has no combat head; "
                                  "start a new run")
         self.model = TavernNet(mcfg).to(self.device)
+        if init is not None:
+            self.model.load_state_dict(init["model"])
+            print(f"initialized from {cfg.init_from} (its iteration {init.get('iteration')})")
         self.opt = torch.optim.AdamW(self.model.parameters(), lr=cfg.lr, weight_decay=0.0,
                                      eps=1e-5)
         self.it = 0
         self.league = []  # list of (iteration, cpu state dict)
+        self.difficulty = cfg.difficulty  # library opponents' ladder position
         self.load_latest()
         self.collector = Collector(cfg, self.device)
+        if self.collector.library_seats is not None:
+            self.collector.library_seats.d = self.difficulty
+        self.exam = None
+        if cfg.exam_path:
+            from .library import Library, ladder
+
+            exam = Library.load(cfg.exam_path)
+            self.exam = (exam, ladder(exam))
         self.metrics = open(self.run_dir / "metrics.jsonl", "a")
         try:
             from torch.utils.tensorboard import SummaryWriter
@@ -431,6 +496,7 @@ class Trainer:
             "model": self.model.state_dict(),
             "opt": self.opt.state_dict(),
             "league_iters": [i for i, _ in self.league],
+            "difficulty": self.difficulty,
             "taverngym": {"version": taverngym.version(), "game": taverngym.game_version()},
         }
         tmp = self.run_dir / "latest.pt.tmp"
@@ -450,6 +516,9 @@ class Trainer:
         self.model.load_state_dict(ck["model"])
         self.opt.load_state_dict(ck["opt"])
         self.it = ck["iteration"]
+        if "difficulty" in ck and self.cfg.opponents == "library" and ck["config"].get(
+                "opponents") == "library":
+            self.difficulty = ck["difficulty"]
         iters = ck.get("league_iters", [])
         if not iters and self.cfg.opponents in ("league", "hybrid"):
             # a run that switches to league / hybrid opponents: start from its own snapshots
@@ -485,6 +554,35 @@ class Trainer:
         return opp.eval()
 
     # ---- main loop
+    def adapt_difficulty(self, placement):
+        """Library opponents: climb the ladder while the learner wins, step back while it
+        loses (the thresholds are TrainConfig.difficulty_up / difficulty_down)."""
+        seats = self.collector.library_seats
+        if seats is None or placement is None:
+            return
+        cfg = self.cfg
+        if placement < cfg.difficulty_up:
+            self.difficulty += cfg.difficulty_step
+        elif placement > cfg.difficulty_down:
+            self.difficulty -= cfg.difficulty_step
+        self.difficulty = float(np.clip(self.difficulty, 0.0, seats.difficulty.max))
+        seats.d = self.difficulty
+
+    def exam_eval(self):
+        """The paper's exam: the policy against a library it never trained on, at fixed
+        difficulties (TrainConfig.exam_difficulties)."""
+        cfg = self.cfg
+        lib, lad = self.exam
+        out = {"iteration": self.it}
+        for dd in cfg.exam_difficulties:
+            r = evaluate(self.model, cfg.exam_games, n_parallel=min(64, cfg.exam_games),
+                         threads=cfg.threads, sample=True, device=self.device, rules="full",
+                         library=lib, difficulty=lad, d=dd, sigma=cfg.library_sigma)
+            out[f"exam_d{dd:g}"] = r["avg_placement"]
+            out[f"exam_d{dd:g}_ci95"] = r["ci95"]
+            out[f"exam_d{dd:g}_top4"] = r["top4"]
+        return out
+
     def lr_at(self, it):
         cfg = self.cfg
         span = cfg.lr_schedule_iters or cfg.iterations
@@ -534,12 +632,15 @@ class Trainer:
                 for k, v in m.items():
                     if isinstance(v, (int, float)) and k != "iteration":
                         self.tb.add_scalar(k, v, self.it)
+            self.adapt_difficulty(m["avg_placement"])
             fmt = lambda x: "-" if x is None else f"{x:.2f}"  # noqa: E731
             print(f"it {self.it:4d} | place {fmt(m['avg_placement'])} top4 {fmt(m['top4'])} "
                   f"| t8 board {fmt(m.get('board_t8'))} tier {fmt(m.get('tier_t8'))} "
                   f"| acts/turn {m.get('actions_per_turn', '-')} moves {m.get('move_frac', '-')} "
                   f"| kl {m['kl']:.4f} ent {m['ent']:.3f} | {m['decisions_per_s']:.0f} dec/s "
                   f"roll {t_roll:.0f}s upd {t_upd:.0f}s"
+                  + (f" | d {m['difficulty']:.2f} opp t8 {m.get('opp_given_t8', '-')}"
+                     if "difficulty" in m else "")
                   + (f" | skipped {up['skipped']} non-finite steps" if up["skipped"] else ""),
                   flush=True)
             if cfg.eval_every and self.it % cfg.eval_every == 0:
@@ -558,6 +659,17 @@ class Trainer:
                         self.tb.add_scalar(f"eval_vs_bots/{k}", r[k], self.it)
                 print(f"     eval vs bots: place {r['avg_placement']:.2f} ±{r['ci95']:.2f} "
                       f"top1 {r['top1']:.2f} top4 {r['top4']:.2f} ({r['games']} games)", flush=True)
+                if self.exam is not None:
+                    ex = self.exam_eval()
+                    self.metrics.write(json.dumps(ex) + "\n")
+                    self.metrics.flush()
+                    if self.tb:
+                        for k, v in ex.items():
+                            if k.startswith("exam_d") and not k.endswith(("_ci95", "_top4")):
+                                self.tb.add_scalar(f"exam/{k}", v, self.it)
+                    print("     exam library (never trained on): " + "  ".join(
+                        f"d{dd:g} {ex[f'exam_d{dd:g}']:.2f} ±{ex[f'exam_d{dd:g}_ci95']:.2f}"
+                        for dd in cfg.exam_difficulties), flush=True)
                 if cfg.bench_dir:
                     from .tavernbench import bench_eval
 

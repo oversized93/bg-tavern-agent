@@ -32,8 +32,15 @@ Power.log to suggest moves. Cranny plays every game himself.
 - `bgagent/tavernbench.py`: answers TavernBench's 23 decision scenarios with a policy (value
   head or constrained policy pick) and scores them with the benchmark's own code. Needs an
   AutoTavern checkout at the pinned commit (`--bench`, `bench_dir`, `TAVERNBENCH_DIR`).
-- `scripts/`: train.py, evaluate.py, advise.py, status.py, tavernbench.py; setup and start scripts
-  for Windows (`setup_windows.ps1`, `start_3070.cmd`) and WSL2 (`setup_wsl.sh`, `start_3070.sh`).
+- `bgagent/library.py`: the paper's library seats. Opponent seats that never recruit; each
+  turn their board, hand, Tier and buff counters are replaced (BatchEnv save/load) with an
+  entry matched to a target strength curve, on a difficulty ladder from the library's own
+  median up to Firestone's top-1% curve. `opponents=library`, `library_path`, `exam_path`.
+- `bgagent/human.py`: Firestone reference curves (warband strength by turn per MMR bracket),
+  read from `data/firestone` (fetched by `scripts/fetch_firestone.py`, not in git).
+- `scripts/`: train.py, evaluate.py, advise.py, status.py, tavernbench.py, fetch_firestone.py,
+  build_library.py; setup and start scripts for Windows (`setup_windows.ps1`, `start_3070.cmd`)
+  and WSL2 (`setup_wsl.sh`, `start_3070.sh`).
 
 ## Commands
 - Tests: `pytest -q` (fast; run before every commit)
@@ -46,6 +53,9 @@ Power.log to suggest moves. Cranny plays every game himself.
 - Head to head: `python scripts/evaluate.py runs/b/policy_00200.pt --vs runs/a/policy_00100.pt`
 - Is it learning? `python scripts/diagnose.py random runs/<name>/policy_00050.pt`
   (placement vs bots lags far behind; warband size and tier by turn move first)
+- Human data: `python scripts/fetch_firestone.py` (cached 12 h; data/firestone)
+- Library: `python scripts/build_library.py --out data/library/train.jsonl.gz --games 1000
+  --seed 1 --policy runs/full-01/policy_00500.pt:0,1,2,3` (exam: other seed and policies)
 
 ## Conventions
 - Training from scratch against scripted bots alone gives no signal (a fresh policy places

@@ -46,6 +46,19 @@ def main():
               f"tier {last.get('tier_t8', '-')}  gold left {last.get('gold_left_t8', '-')}  "
               f"| {last.get('actions_per_turn', '-')} actions/turn, "
               f"{last.get('move_frac', '-')} of them moves")
+    if "difficulty" in last:
+        pairs = "  ".join(f"t{t} {last[f'opp_given_t{t}']:.0f}/{last[f'opp_target_t{t}']:.0f}"
+                          for t in (4, 6, 8, 10, 12) if f"opp_given_t{t}" in last)
+        print(f"library opponents: difficulty {last['difficulty']:.2f} "
+              f"(0 = library median, 1 = all players ... 5 = top 1%)  "
+              f"board strength given/target: {pairs}")
+    exams = latest([r for r in rows if any(k.startswith("exam_d") for k in r)])
+    if exams:
+        print("exam library, never trained on (placement, lower is better; 4.5 = even):")
+        for r in exams[-5:]:
+            cols = [k for k in r if k.startswith("exam_d") and not k.endswith(("_ci95", "_top4"))]
+            print(f"  it {r['iteration']:4d}: " + "  ".join(
+                f"{k[5:]} {r[k]:.2f} ±{r[k + '_ci95']:.2f}" for k in cols))
     if evals:
         print("vs scripted bots (lower is better; random = 7.95, bot = 4.50):")
         for r in evals[-8:]:
