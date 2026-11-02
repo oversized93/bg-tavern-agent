@@ -41,6 +41,10 @@ def main():
     if skipped:
         print(f"WARNING: {skipped} update steps skipped for non-finite gradients "
               f"(last at iteration {max(r['iteration'] for r in train if r.get('skipped'))})")
+    tiers = [(t, last[f"tier_t{t}"]) for t in (2, 3, 4, 6, 8, 10) if f"tier_t{t}" in last]
+    if tiers:  # real winners (Perfect Games): Tier 2 by turn 2-3, 2.45 at 4, 3.6 at 6, 4.9 at 8, 5.6 at 10
+        print("tier by turn: " + "  ".join(f"t{t} {v:.2f}" for t, v in tiers)
+              + "   (real winners: t2-3 2.0, t4 2.45, t6 3.6, t8 4.9, t10 5.6)")
     if "tier_t8" in last or "actions_per_turn" in last:
         print(f"behaviour at turn 8 End Turn: board {last.get('board_t8', '-')}  "
               f"tier {last.get('tier_t8', '-')}  gold left {last.get('gold_left_t8', '-')}  "

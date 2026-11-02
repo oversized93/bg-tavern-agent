@@ -204,7 +204,8 @@ class Collector:
     def stats_reset(self):
         self.placements, self.ep_lens, self.rejected, self.dropped = [], [], 0, 0
         # behaviour at each learner End Turn, by turn: (warband size, Tavern Tier, gold left)
-        self.end_turn = {t: [] for t in (4, 6, 8, 10)}
+        # (turns 2 and 3: real players are on Tier 2 by then, the earliest sign of levelling)
+        self.end_turn = {t: [] for t in (2, 3, 4, 6, 8, 10)}
         self.n_actions, self.n_moves, self.n_end_turns = 0, 0, 0
         if getattr(self, "library_seats", None) is not None:
             self.library_seats.stats_reset()
