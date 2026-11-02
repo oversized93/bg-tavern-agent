@@ -41,6 +41,10 @@ Power.log to suggest moves. Cranny plays every game himself.
   created it (stats read when that block ends: minions are created with base stats), Tiers,
   heroes. `EntryBuilder` turns boards into library entries through TavernGym's debug
   commands. Player names and account ids are never read (names are blanked before parsing).
+- `bgagent/bootcamp.py`: the levelling bootcamp. While a learner seat is below a (turn, tier)
+  schedule and can afford Upgrade, it upgrades instead of acting; forced steps train the value
+  head, not the policy. `level_curve`, `level_force`, `level_force_decay` (the hand-back).
+  Evaluations use the same forcing.
 - `bgagent/human.py`: Firestone reference curves (warband strength by turn per MMR bracket),
   read from `data/firestone` (fetched by `scripts/fetch_firestone.py`, not in git).
 - `scripts/`: train.py, evaluate.py, advise.py, status.py, tavernbench.py, fetch_firestone.py,
@@ -83,7 +87,9 @@ Power.log to suggest moves. Cranny plays every game himself.
 - Never delete a run folder without asking.
 - Human data (Firestone and HSReplay stats, Cranny's own game logs) only calibrates opponents and
   evaluation, as the paper did. Never train the policy on human moves (no imitation learning):
-  Cranny's decision, to stay with the paper's method.
+  Cranny's decision, to stay with the paper's method. One exception he approved (2026-11-02):
+  the levelling bootcamp may force Upgrade on real winners' average Tier-by-turn schedule
+  (`bootcamp.WINNERS`) as a temporary training aid. Ask before any other human-derived forcing.
 - Firestone data: its developer, 2026-11-01 (relayed by Cranny): "So long as the data is not
   used commercially, all data available on the application itself can be fully utilized by
   any other developer". Its stats endpoints (`static.zerotoheroes.com/api/bgs/...`) are the files

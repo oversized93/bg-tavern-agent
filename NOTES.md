@@ -1085,6 +1085,48 @@ minion whatever its Tier; without it the AI wins 1 game in 700, and its no-level
 can't keep up with the late real boards. Another reason a first-place reward would not teach
 levelling: it would mostly teach "take the Gauntlet".
 
+## 2026-11-02: the levelling bootcamp (Cranny: "Do A")
+
+The question that decides the fix: once the AI can play Tiers 4-6, does levelling pay in our
+training world? If yes, it is a local optimum (it won't level until it can use the high Tiers,
+and can't learn them without levelling), and the fix is to make it level for a while and hand
+the decision back. If no, the library seats punish levelling too hard, and the fix is the
+opponents (e.g. replaying one real player's game turn by turn instead of a fresh on-curve
+board every turn).
+
+Research. OpenAI Five (Berner et al. 2019, arXiv 1912.06680) never let the policy choose item
+and ability purchases or the courier: hand-scripted logic did, "mostly a legacy" as the model
+took over more actions over time, and still scripted at superhuman level. Jump-Start RL
+(Uchendu et al., ICML 2023, arXiv 2204.02372): a guide policy plays the first part of each
+episode and its share falls as the learner improves; exploration with a guide goes from
+exponential to polynomial in the horizon. A first-place reward was checked and does not help
+(above). Departure from the paper: it has nothing like this.
+
+Cranny's decision (option a of three; b = his own schedule, c = TavernGym's bot rule): force
+Upgrade on real winners' average Tier by turn, as a temporary training aid. It is the one
+exception to "no human moves in training" (CLAUDE.md, memory no-imitation).
+
+**Implementation** (`bgagent/bootcamp.py`, `level_curve` / `level_force` / `level_force_decay`):
+while a learner seat's Tier is below `bootcamp.WINNERS` = (turn, tier) (2, 2), (5, 3), (6, 4),
+(8, 5), (10, 6) and Upgrade is legal (after the action filter, outside hero select), its action is
+Upgrade instead of the policy's sample, in a fraction `level_force` of its episodes (drawn per
+episode). The forced steps keep their place in the trajectory, so the value head learns what
+the higher Tiers are worth and the advantages of the policy's own later choices include them,
+but they carry `train_pi = 0`: no policy gradient, no KL / clip statistics (their ratio is set
+to 1, so no 0 * inf). Every other decision is the policy's, including levelling above the
+curve. Evaluations (bots, exam) use the same forcing, so they measure the agent as it trains.
+`level_force_decay = (start, end)` lowers the fraction linearly to 0: the hand-back. Tests:
+`test_level_curve_target_and_forcing`, `test_forced_steps_get_no_policy_gradient`; 32 pass.
+Smoke run (tiny, library seats): tier t2 / t4 / t6 / t8 = 1.98 / 2.19 / 3.71 / 4.99, ~4 forced
+Upgrades per game.
+
+**scratch-01 stopped at it 279** (latest.pt at 275; policies every 25 to 275) to free the GPU.
+**runs/boot-01 started 2026-11-02 ~16:05**: scratch-01's config exactly (same seed, library
+seats from d -2, 4 learner seats, 1000 iterations, lr schedule 4000), plus
+`level_curve=WINNERS, level_force=1.0`, no decay yet. The test: at it 150, boot-01 (on its
+curve) against scratch-01's policy_00150 head to head in training lobbies, and both on the exam.
+Boot-01 ahead: local optimum, keep it and plan the hand-back. Behind: fix the opponents.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.

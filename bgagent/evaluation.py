@@ -24,7 +24,7 @@ def _choose(model, feats, cards, mask, sample, device, amp, rng):
 @torch.inference_mode()
 def evaluate(policy, games, n_parallel=64, threads=4, sample=False, device="cpu",
              seed=EVAL_SEED, rules="full", opponent=None, library=None, difficulty=None,
-             d=0.0, sigma=0.25):
+             d=0.0, sigma=0.25, level=None):
     """Average placement (1 best, 8 worst) with a 95% interval, top-1 and top-4 rates.
 
     `policy` sits in seat 0. By default the other seven seats are TavernGym's scripted bots;
@@ -34,7 +34,8 @@ def evaluate(policy, games, n_parallel=64, threads=4, sample=False, device="cpu"
     library that was never trained on). `policy=None` plays uniformly random legal actions
     (about 7.95 against the bots). `rules` names a rule set in bgagent/rules.py; "full" is the
     real game with a per-turn action cap. Each model uses the action filter it was trained
-    with."""
+    with. `level` = (curve, fraction): the tested policy plays under the levelling bootcamp
+    (bgagent/bootcamp.py), as it trained."""
     device = torch.device(device)
     amp = device.type == "cuda"
     controlled = (0,) if opponent is None and library is None else tuple(range(8))
@@ -48,6 +49,11 @@ def evaluate(policy, games, n_parallel=64, threads=4, sample=False, device="cpu"
     active = np.ones(env.n_slots, bool)
     filt = ActionFilter.for_model(env.n_slots, policy)  # the rules the policy trained with
     opp_filt = ActionFilter.for_model(env.n_slots, opponent)
+    lvl = None
+    if level is not None and level[0]:
+        from .bootcamp import LevelCurve
+
+        lvl = LevelCurve(env, level[0], level[1], seed=seed)
     seats = None
     if library is not None:
         from .library import LibrarySeats
@@ -68,8 +74,10 @@ def evaluate(policy, games, n_parallel=64, threads=4, sample=False, device="cpu"
                 actions[idx] = seats.actions(o, idx)
                 continue
             m = f.apply(o["features"][idx], o["action_mask"][idx], idx)
-            actions[idx] = _choose(model, o["features"][idx], o["cards"][idx], m, sample,
-                                   device, amp, rng)
+            a = _choose(model, o["features"][idx], o["cards"][idx], m, sample, device, amp, rng)
+            if tested and lvl is not None:
+                lvl.apply(o["features"][idx], m, a, idx)
+            actions[idx] = a
             f.record(idx, actions[idx])
         _, dones, info = env.step(actions)
         if seats is not None:

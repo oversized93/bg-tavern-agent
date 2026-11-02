@@ -45,6 +45,10 @@ def main():
     if tiers:  # real winners (Perfect Games): Tier 2 by turn 2-3, 2.45 at 4, 3.6 at 6, 4.9 at 8, 5.6 at 10
         print("tier by turn: " + "  ".join(f"t{t} {v:.2f}" for t, v in tiers)
               + "   (real winners: t2-3 2.0, t4 2.45, t6 3.6, t8 4.9, t10 5.6)")
+    if "level_force" in last:  # the levelling bootcamp (bgagent/bootcamp.py)
+        print(f"levelling bootcamp: Upgrade forced on the winners' schedule in "
+              f"{last['level_force']:.0%} of games ({last.get('forced_upgrades_per_game', '-')} "
+              f"forced Upgrades per game)")
     if "tier_t8" in last or "actions_per_turn" in last:
         print(f"behaviour at turn 8 End Turn: board {last.get('board_t8', '-')}  "
               f"tier {last.get('tier_t8', '-')}  gold left {last.get('gold_left_t8', '-')}  "

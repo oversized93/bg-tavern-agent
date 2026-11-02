@@ -540,3 +540,59 @@ def test_difficulty_below_zero_scales_the_median():
     assert lad.target(0.0, 8) == pytest.approx(200.0) and lad.target(1.0, 8) == pytest.approx(1000.0)
     assert abs(lad.target(-1.0, 8) - 20.0) < 1e-9 and abs(lad.target(-2.0, 8) - 2.0) < 1e-9
     assert lad.target(0.5, 8) > lad.target(0.0, 8) > lad.target(-0.5, 8) > lad.target(-1.0, 8)
+
+
+def test_level_curve_target_and_forcing():
+    from bgagent.bootcamp import WINNERS, LevelCurve, check_curve, target_tier
+
+    assert list(target_tier(WINNERS, [1, 2, 4, 5, 6, 8, 10, 15])) == [1, 2, 2, 3, 4, 5, 6, 6]
+    with pytest.raises(ValueError):
+        check_curve(((2, 3), (5, 2)))
+
+    class Env:  # four slots of one game, episode 0
+        n_slots = 4
+
+        def slot(self, i):
+            return 0, i
+
+        def episode_index(self, g):
+            return 0
+
+    f = np.zeros((4, 64), np.float32)
+    f[:, 0] = 2 / 20  # turn 2: the curve wants Tier 2
+    f[:, 10] = 1 / 6  # Tier 1
+    f[1, 10] = 2 / 6  # already Tier 2
+    f[3, 1] = 1.0  # hero select
+    mask = np.ones((4, L.N_ACTIONS), bool)
+    mask[2, L.A_UPGRADE] = False  # can't afford it
+    a = np.zeros(4, np.int64)
+    forced = LevelCurve(Env(), WINNERS, p=1.0).apply(f, mask, a, np.arange(4))
+    assert list(forced) == [True, False, False, False]
+    assert list(a) == [L.A_UPGRADE, 0, 0, 0]
+    a = np.zeros(4, np.int64)
+    assert not LevelCurve(Env(), WINNERS, p=0.0).apply(f, mask, a, np.arange(4)).any()
+    assert not a.any()
+
+
+def test_forced_steps_get_no_policy_gradient():
+    from bgagent.ppo import TrainConfig, ppo_update
+
+    cfg = TrainConfig(model="tiny", minibatch=16, micro_batch=8)
+    torch.manual_seed(0)
+    net = TavernNet(ModelConfig(d=64, layers=2, heads=4))
+    o = next(iter(random_observations(1)))
+    mk = np.packbits(o["action_mask"][0])
+    legal = int(np.nonzero(o["action_mask"][0])[0][0])
+
+    def traj(forced):
+        return [[o["features"][0].astype(np.float16), o["cards"][0].astype(np.int16), mk, legal,
+                 -30.0, 0.0, 0.0, forced] for _ in range(16)]
+
+    b = build_batch([(traj(True), 1)], 1.0, 0.995)
+    assert b["train_pi"].sum() == 0
+    opt = torch.optim.AdamW(net.parameters(), lr=1e-3)
+    s = ppo_update(net, opt, b, cfg, torch.device("cpu"))
+    assert s["pg"] == 0.0 and s["kl"] == 0.0 and s["vf"] > 0  # the value head still learns
+    assert all(torch.isfinite(p).all() for p in net.parameters())
+    b = build_batch([(traj(False), 1)], 1.0, 0.995)
+    assert b["train_pi"].min() == 1

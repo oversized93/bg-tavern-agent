@@ -85,6 +85,15 @@ class TrainConfig:
     # anchor_iters iterations. The starting policy is `init_from`, so it needs one.
     anchor_coef: float = 0.0
     anchor_iters: int = 100
+    # Levelling bootcamp (bgagent/bootcamp.py; NOTES.md, 2026-11-02): (turn, tier) pairs; while
+    # a learner seat is below them and can afford Upgrade, it upgrades instead of acting, in a
+    # fraction `level_force` of its episodes. `level_force_decay` = (start, end) iterations:
+    # the fraction falls linearly to 0 between them (the hand-back); () = constant. Forced
+    # steps train the value head, not the policy. Evaluations use the same forcing.
+    # bootcamp.WINNERS = real winners' averages (Cranny's OK, 2026-11-02). () = off.
+    level_curve: tuple = ()
+    level_force: float = 1.0
+    level_force_decay: tuple = ()
     torch_threads: int = 0  # CPU threads for torch; 0 = torch's default
     factored: bool = True  # factored action head (see ModelConfig.factored)
     move_cap: int = 6  # action filter (see filters.py): minion moves allowed per turn, 0 = off
@@ -199,6 +208,11 @@ class Collector:
             self.library_seats = LibrarySeats(self.env, others, lib, ladder(lib),
                                               d=cfg.difficulty, sigma=cfg.library_sigma,
                                               seed=cfg.seed)
+        self.level = None
+        if cfg.level_curve:
+            from .bootcamp import LevelCurve
+
+            self.level = LevelCurve(self.env, cfg.level_curve, cfg.level_force, seed=cfg.seed)
         self.open = [[] for _ in range(n)]
         self.obs = self.env.observe()
         self.opponent = None  # frozen model for league seats
@@ -210,7 +224,7 @@ class Collector:
         # behaviour at each learner End Turn, by turn: (warband size, Tavern Tier, gold left)
         # (turns 2 and 3: real players are on Tier 2 by then, the earliest sign of levelling)
         self.end_turn = {t: [] for t in (2, 3, 4, 6, 8, 10)}
-        self.n_actions, self.n_moves, self.n_end_turns = 0, 0, 0
+        self.n_actions, self.n_moves, self.n_end_turns, self.n_forced = 0, 0, 0, 0
         if getattr(self, "library_seats", None) is not None:
             self.library_seats.stats_reset()
 
@@ -225,6 +239,9 @@ class Collector:
             out["actions_per_turn"] = round(self.n_actions / self.n_end_turns, 1)
         if self.n_actions:
             out["move_frac"] = round(self.n_moves / self.n_actions, 3)
+        if self.level is not None:
+            out["level_force"] = round(self.level.p, 3)
+            out["forced_upgrades_per_game"] = round(self.n_forced / max(len(self.placements), 1), 2)
         if self.library_seats is not None:  # what the opponents fought with, vs the target
             for t in (4, 6, 8, 10, 12):
                 rows = self.library_seats.given.get(t)
@@ -252,6 +269,10 @@ class Collector:
                 lm = self.filter.apply(o["features"][lr_idx], o["action_mask"][lr_idx], lr_idx)
                 a, lp, v = act(model, o["features"][lr_idx], o["cards"][lr_idx], lm,
                                self.device, self.amp)
+                forced = np.zeros(len(a), bool)
+                if self.level is not None:  # the bootcamp: Upgrade on the curve
+                    forced = self.level.apply(o["features"][lr_idx], lm, a, lr_idx)
+                    self.n_forced += int(forced.sum())
                 self.filter.record(lr_idx, a)
                 actions[lr_idx] = a
                 stored = store_features(o["features"][lr_idx])
@@ -262,6 +283,7 @@ class Collector:
                         stored[j].copy(), o["cards"][i].astype(np.int16),  # copy: no view
                         np.packbits(lm[j]), aj, float(lp[j]),
                         float(v[j]), -cfg.move_cost if is_move else 0.0,
+                        bool(forced[j]),  # not the policy's choice: no policy gradient
                     ])
                     self.n_actions += 1
                     self.n_moves += is_move
@@ -346,7 +368,7 @@ def combat_labels(f, place):
 
 def build_batch(trajs, gamma, lam):
     feats, cards, masks, acts, logps, vals, advs, rets, places = ([] for _ in range(9))
-    lost, dmg, cw = [], [], []
+    lost, dmg, cw, train_pi = [], [], [], []
     for traj, place in trajs:
         v = np.array([t[5] for t in traj], np.float32)
         r = np.array([t[6] for t in traj], np.float32)
@@ -366,6 +388,8 @@ def build_batch(trajs, gamma, lam):
         advs.append(adv)
         rets.append(adv + v)
         places.append(np.full(len(traj), place - 1, np.int64))
+        # 0 for actions the bootcamp forced (bootcamp.py): they train the value head only
+        train_pi.append(np.array([0.0 if len(t) > 7 and t[7] else 1.0 for t in traj], np.float32))
         lo, dm, w = combat_labels(feats[-1], place)
         lost.append(lo)
         dmg.append(dm)
@@ -376,7 +400,7 @@ def build_batch(trajs, gamma, lam):
         "mask": np.unpackbits(cat(masks), axis=1, count=L.N_ACTIONS).astype(bool),
         "act": cat(acts), "logp": cat(logps), "val": cat(vals), "adv": cat(advs),
         "ret": cat(rets), "place": cat(places),
-        "lost": cat(lost), "dmg": cat(dmg), "cw": cat(cw),
+        "lost": cat(lost), "dmg": cat(dmg), "cw": cat(cw), "train_pi": cat(train_pi),
     }
 
 
@@ -385,6 +409,8 @@ def ppo_update(model, opt, batch, cfg: TrainConfig, device, anchor=None, anchor_
     anchor_coef * KL(policy || anchor) over the legal actions."""
     amp = device.type == "cuda"
     n = len(batch["act"])
+    if "train_pi" not in batch:  # every action was the policy's own
+        batch = {**batch, "train_pi": np.ones(n, np.float32)}
     T = {k: torch.from_numpy(v) for k, v in batch.items()}
     stats = {"pg": 0.0, "vf": 0.0, "ent": 0.0, "aux": 0.0, "combat": 0.0, "kl": 0.0,
              "clipfrac": 0.0, "anchor_kl": 0.0}
@@ -413,7 +439,13 @@ def ppo_update(model, opt, batch, cfg: TrainConfig, device, anchor=None, anchor_
                 logp = logp_all.gather(1, g("act")[:, None]).squeeze(-1)
                 ratio = torch.exp(logp - g("logp"))
                 adv = (g("adv") - adv_mean.to(device)) / adv_std.to(device)
-                pg = -torch.min(ratio * adv, ratio.clamp(1 - cfg.clip, 1 + cfg.clip) * adv).mean()
+                # Actions the bootcamp forced (train_pi = 0) were not sampled from the policy:
+                # no policy gradient, and they don't count toward the KL / clip statistics.
+                tp = g("train_pi")
+                n_pi = tp.sum().clamp(min=1.0)
+                ratio = torch.where(tp > 0, ratio, torch.ones_like(ratio))  # no 0 * inf = nan
+                pg = -(torch.min(ratio * adv, ratio.clamp(1 - cfg.clip, 1 + cfg.clip) * adv)
+                       * tp).sum() / n_pi
                 vf = 0.5 * (value - g("ret")).pow(2).mean()
                 p = logp_all.exp()
                 ent = -(p * logp_all.masked_fill(~g("mask"), 0.0)).sum(-1).mean()
@@ -439,9 +471,10 @@ def ppo_update(model, opt, batch, cfg: TrainConfig, device, anchor=None, anchor_
                     loss = loss + anchor_coef * anchor_kl
                 (loss * w).backward()
                 with torch.no_grad():
-                    kl = ((ratio - 1) - torch.log(ratio)).mean()  # k3 estimator
+                    kl = (((ratio - 1) - torch.log(ratio)) * tp).sum() / n_pi  # k3 estimator
                     mb_stats["kl"] += kl.item() * w
-                    mb_stats["clipfrac"] += ((ratio - 1).abs() > cfg.clip).float().mean().item() * w
+                    mb_stats["clipfrac"] += (((ratio - 1).abs() > cfg.clip).float() * tp).sum().item() \
+                        / n_pi.item() * w
                 for k, val in (("pg", pg), ("vf", vf), ("ent", ent), ("aux", aux),
                                ("combat", combat), ("anchor_kl", anchor_kl)):
                     mb_stats[k] += val.item() * w
@@ -506,6 +539,14 @@ class Trainer:
         if init is not None:
             self.model.load_state_dict(init["model"])
             print(f"initialized from {cfg.init_from} (its iteration {init.get('iteration')})")
+        if cfg.level_curve:
+            from .bootcamp import check_curve
+
+            check_curve(cfg.level_curve)
+            if cfg.level_force_decay and (len(cfg.level_force_decay) != 2
+                                          or cfg.level_force_decay[1] <= cfg.level_force_decay[0]):
+                raise ValueError(f"level_force_decay needs (start, end) iterations, end > start; "
+                                 f"got {cfg.level_force_decay}")
         if cfg.placement_utility and len(cfg.placement_utility) != 8:
             raise ValueError(f"placement_utility needs 8 values (places 1..8), got "
                              f"{cfg.placement_utility}")
@@ -636,11 +677,26 @@ class Trainer:
         for dd in cfg.exam_difficulties:
             r = evaluate(self.model, cfg.exam_games, n_parallel=min(64, cfg.exam_games),
                          threads=cfg.threads, sample=True, device=self.device, rules="full",
-                         library=lib, difficulty=lad, d=dd, sigma=cfg.library_sigma)
+                         library=lib, difficulty=lad, d=dd, sigma=cfg.library_sigma,
+                         level=self.level())
             out[f"exam_d{dd:g}"] = r["avg_placement"]
             out[f"exam_d{dd:g}_ci95"] = r["ci95"]
             out[f"exam_d{dd:g}_top4"] = r["top4"]
         return out
+
+    def level_force_at(self, it):
+        """The bootcamp's forcing fraction at iteration `it` (falls to 0 over the decay)."""
+        cfg = self.cfg
+        if not cfg.level_force_decay:
+            return cfg.level_force
+        a, b = cfg.level_force_decay
+        return cfg.level_force * float(np.clip((b - it) / (b - a), 0.0, 1.0))
+
+    def level(self):
+        """The bootcamp as evaluations use it: (curve, fraction), or None."""
+        if not self.cfg.level_curve:
+            return None
+        return self.cfg.level_curve, self.level_force_at(self.it)
 
     def lr_at(self, it):
         cfg = self.cfg
@@ -656,6 +712,8 @@ class Trainer:
             for g in self.opt.param_groups:
                 g["lr"] = self.lr_at(self.it)
             self.collector.opponent = self.pick_opponent()
+            if self.collector.level is not None:
+                self.collector.level.p = self.level_force_at(self.it)
             self.collector.stats_reset()
             self.model.eval()
             trajs, t_roll = self.collector.collect(self.model)
@@ -710,7 +768,8 @@ class Trainer:
                 # a minion move until the per-turn action cap, which makes evaluation crawl.
                 # scripts/evaluate.py measures the greedy policy on snapshots.
                 r = evaluate(self.model, cfg.eval_games, n_parallel=min(64, cfg.eval_games),
-                             threads=cfg.threads, sample=True, device=self.device, rules="full")
+                             threads=cfg.threads, sample=True, device=self.device, rules="full",
+                             level=self.level())
                 ev = {"iteration": self.it, **{f"eval_{k}": v for k, v in r.items()}}
                 self.metrics.write(json.dumps(ev) + "\n")
                 self.metrics.flush()
