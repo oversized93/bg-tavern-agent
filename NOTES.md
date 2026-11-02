@@ -544,6 +544,13 @@ Training placement at d = 0, averaged per 10 iterations (256 games each, so ~±0
   396 vs 977). Flooding a tier-2 board is still the right answer to them; only climbing toward
   the human curves makes the late game punish it.
 
+**Climb threshold 4.0 -> 4.5 at it 90** (Cranny's go-ahead): stopped after the it-90
+checkpoint, resumed with `difficulty_up=4.5` (down stays 5.0), so d rises after any iteration
+better than even. Expected to settle where the learner places ~4.75. Its 81-90 had averaged
+4.58 at d = 0; it 90 eval: bots 2.34 ±0.16, exam d0 4.18 / d1 6.65 / d5 7.45, TavernBench
+0.35 / 0.33. First climbs: it 93 (3.97) and it 94 (4.34) took d to 0.10. Turn-8 opponents barely
+change with d (d0 225 vs d1 230 at turn 8); the ladder bites from turn 10 on.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
