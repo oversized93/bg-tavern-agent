@@ -1151,6 +1151,20 @@ But it is the opposite of our training world, where the slow curve did better fo
 (5.16-5.77 vs 5.48-6.26 above): the library seats forgive slow levelling far more than real
 lobbies do. The boot-01 test still decides whether the AI can make levelling pay there.
 
+**boot-01 check-in at it 80** (17:21, ~44 s/iter), against scratch-01 at the same iteration
+(same seed and config; boot-01's evals play under the forcing, as it trains):
+
+| it 80 | train place (last 10) | difficulty | bots | exam d0 | d1 | d5 | entropy | t8 Tier | bench policy |
+|---|---|---|---|---|---|---|---|---|---|
+| scratch-01 | 4.72 | -0.30 | 3.81 ±0.23 | 6.75 | 7.04 | 7.49 | 1.39 | 3.27 | 0.26 |
+| boot-01 | 4.71 | -0.20 | 3.60 ±0.23 | 6.77 ±0.16 | 7.07 | 7.47 | 1.58 | 4.96 | 0.31 |
+
+Even on every measure within the noise (bots slightly ahead, the ladder 0.1 higher), while
+levelling on the winners' curve (4.6 forced Upgrades a game). In the bot test the same curve cost
+the bots 0.33-0.54 places against library seats, so the AI is already earning back what
+levelling costs there. Entropy is higher (1.58 vs 1.39): its own choices are less settled. Not
+the decision yet: that is at it 150 head to head.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
