@@ -1127,6 +1127,30 @@ seats from d -2, 4 learner seats, 1000 iterations, lr schedule 4000), plus
 curve) against scratch-01's policy_00150 head to head in training lobbies, and both on the exam.
 Boot-01 ahead: local optimum, keep it and plan the hand-back. Behind: fix the opponents.
 
+**Real lobbies: levelling against final place** (scratchpad `real_levelling.py`; the 1000
+Perfect Games replays, all eight players from the leaderboard heroes: PLAYER_TECH_LEVEL changes
+with the TURN they happened in, PLAYER_LEADERBOARD_PLACE; names blanked, no account ids read).
+844 lobbies had all eight places (6752 players). Tier at the end of each turn's recruit:
+
+| Place | t2 | t4 | t6 | t8 |
+|---|---|---|---|---|
+| 1 | 1.89 | 2.49 | 3.69 | 4.96 |
+| 2 | 1.89 | 2.57 | 3.68 | 4.83 |
+| 4 | 1.88 | 2.53 | 3.60 | 4.73 |
+| 6 | 1.85 | 2.53 | 3.61 | 4.65 |
+| 7 | 1.85 | 2.50 | 3.54 | 4.48 |
+| 8 | 1.76 | 2.44 | 3.28 | 3.94 |
+
+Everyone levels in real lobbies; even 8th place is at 3.94 by turn 8 (scratch-01 at it 210:
+2.35). Among the seven who did not win: Tier 1 at turn 4 (68 players, 1.2%) placed 7.32 ±0.27
+(top-4 0.04); Tier 2 at turn 6 (263, 4.5%) 7.12 ±0.19 (top-4 0.09); Tier 3 / 4 / 5+ at turn 6
+4.95 / 4.85 / 4.95. Tier 1 vs 2+ at turn 2: 5.46 vs 4.92. So in real lobbies our AI's curve goes
+with 7th place, while beyond the usual curve a little faster or slower barely matters.
+Correlation, not cause (a player low on health may stay low to stabilise; skill confounds it).
+But it is the opposite of our training world, where the slow curve did better for the bots
+(5.16-5.77 vs 5.48-6.26 above): the library seats forgive slow levelling far more than real
+lobbies do. The boot-01 test still decides whether the AI can make levelling pay there.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
