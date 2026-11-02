@@ -987,6 +987,26 @@ total stats, against a target of 2: `pick` caps scaling at 1/50, and every minio
 least 1/1. The question: does early levelling survive while the placement improves? full-01
 lost it (t4 1.63 -> 1.00, t8 2.90 -> 2.15).
 
+**Check-in at it 90 (12:41)**, 10-iteration means, scratch-01 against full-01 at the same point:
+
+| its | scratch place / d / ent | scratch tier t2 / t4 / t8 | full-01 tier t4 / t8 |
+|---|---|---|---|
+| 0-9 | 5.92 / -2.00 / 1.98 | 1.20 / 1.62 / 2.86 | 1.65 / 2.94 |
+| 20-29 | 3.25 / -1.32 / 1.87 | 1.35 / 1.79 / 3.73 | 1.31 / 2.63 |
+| 40-49 | 4.49 / -0.47 / 1.62 | 1.38 / 1.77 / 3.76 | 1.28 / 2.81 |
+| 60-69 | 4.58 / -0.35 / 1.52 | 1.44 / 1.75 / 3.56 | 1.35 / 3.12 |
+| 80-89 | 4.66 / -0.27 / 1.35 | 1.41 / 1.68 / 3.36 | 1.25 / 2.83 |
+| 90 | 4.79 / -0.25 / 1.26 | 1.29 / 1.57 / 3.17 | 1.23 / 2.85 |
+
+Levelling went up first (t4 1.62 -> 1.80, t8 2.86 -> 3.82 by it 30-39) and has drifted down
+since it 40 as entropy fell; still above full-01 at every turn. Difficulty climbed from -2 to
+-0.35 by it 50 and has crept since (-0.25): the learners sit at 4.5-4.9, inside the 4.5/5.0
+band, so the library seats at about half the median boards are a fair match. Exam d0 / d1 / d5:
+7.40 / 7.52 / 7.78 at it 40 -> 6.75 / 7.04 / 7.49 at it 80. Vs bots, never trained on: 3.81 at
+it 80 (full-01, trained on them: 3.24). TavernBench flat: lookahead 0.83-0.84, long-term
+0.26-0.32. Watch next: if t4 keeps sliding toward full-01's ~1.25 by it 150, the bots were not
+the whole cause.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
