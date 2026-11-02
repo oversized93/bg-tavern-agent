@@ -1041,6 +1041,28 @@ forced-levelling test on lib-02 (5.38 -> 6.02 at d 1). Two explanations, not yet
 Next: real lobbies (the seven other players in the Perfect Games) to see whether faster
 levelling goes with better placement there; then research before any training change.
 
+**Would a first-place-only reward bring levelling back?** (Cranny: "What if we tuned it to only
+accept first place and everything else is a score -".) The paper does name a first-place stage
+(TA-3, late, no numbers). Checked before changing anything (scratchpad `win_levels.py`):
+scratch-01 at it ~230, sampled, in training lobbies (4 learners + 4 library seats, real-train,
+d -0.2), 1024 lobbies = 4096 learner games, every game run to its end:
+
+| Learner games | n | tier t2 / t4 / t6 / t8 / t10 |
+|---|---|---|
+| 1st | 120 | 1.02 / 1.08 / 1.86 / 2.08 / 2.12 |
+| 2nd-4th | 1716 | 1.02 / 1.08 / 1.98 / 2.24 / 2.39 |
+| 5th-8th | 2260 | 1.02 / 1.09 / 1.97 / 2.24 / 2.38 |
+
+Placement 4.77, top-1 0.029 (training logs: top-1 0.027-0.035 since it 60). Games at tier >= 3 by
+turn 6: 66, placement 5.21, top-1 0.000; tier >= 4 by turn 8: 59, top-1 0.017 (rest 0.029). The
+policy's P(Upgrade) at the first chance: turn 2 median 1.9e-2, turns 3-4 ~2e-5. So a win-only
+reward would (1) score 97% of games the same (~9 wins per iteration to learn from), (2) reward
+the games that levelled least, and (3) seldom see a levelled game at all. The bot test agrees:
+against the library seats the slow curve also wins more first places (0.011 vs 0.004 at d -0.2).
+Not run. Ladder: MMR per placement is not public; one calculator's model (west-games.com, not
+game data) has +96 / +68 / +40 / +14 for 1st-4th, i.e. linear, which the current reward already
+is. Revisit a first-place stage once the AI wins often and levels.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
