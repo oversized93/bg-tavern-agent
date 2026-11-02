@@ -65,7 +65,9 @@ Power.log to suggest moves. Cranny plays every game himself.
 - Human data (Firestone and HSReplay stats, Cranny's own game logs) only calibrates opponents and
   evaluation, as the paper did. Never train the policy on human moves (no imitation learning):
   Cranny's decision, to stay with the paper's method.
-- Firestone's public stats endpoints (`static.zerotoheroes.com/api/bgs/...`, the files its app
-  loads) are allowed for data collection per its developer; its ToS licenses personal,
-  non-commercial use. Keep request rates human-like, cache downloads under `data/` (not in git),
-  never redistribute the raw files, and credit Firestone.
+- Firestone data: its developer, 2026-11-01 (relayed by Cranny): "So long as the data is not
+  used commercially, all data available on the application itself can be fully utilized by
+  any other developer". Its stats endpoints (`static.zerotoheroes.com/api/bgs/...`) are the files
+  the app loads. Non-commercial only: selling or paywalling the tool would need new permission.
+  Keep request rates human-like, cache downloads under `data/` (not in git), never redistribute
+  the raw files, and credit Firestone.

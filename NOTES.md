@@ -404,8 +404,9 @@ Firestone's app loads its Battlegrounds meta stats from static files (from its o
 `libs/battlegrounds/...`): `static.zerotoheroes.com/api/bgs/hero-stats/mmr-{100,50,25,10,1}/
 {last-patch,past-three,past-seven,all-time}/overview-from-hourly.gz.json`, plus `card-stats`
 (same MMR folders), `trinket-stats`, `quest-stats`, `comp-stats` and an MMR-percentile table.
-Its developer allows collecting from them (per their Discord, relayed by Cranny); its ToS is a
-personal, non-commercial license. One sample of each, last patch:
+Its developer, asked by Cranny: "So long as the data is not used commercially, all data
+available on the application itself can be fully utilized by any other developer". Its ToS is
+a personal, non-commercial license. One sample of each, last patch:
 - hero-stats, top 1% MMR: 107 heroes, 22,840 player-games. Per hero: average position,
   placement distribution, pick rate, tribe impact, and per turn `warbandStats` (average warband
   total stats) and `combatWinrate`. The paper's "warband strength by turn" is right there.
