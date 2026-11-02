@@ -735,6 +735,16 @@ Table 7 (final stage, TA-23) against our config:
   snapshots overstated gains (winner's curse); one version doubled its exam first-place rate and
   then lost ~1,300 rating live, from an early/mid-game weakness the exam hid.
 
+- The first-place goal (checked 2026-11-02): the paper gives no numbers for it. Its only mentions
+  are Appendix C ("then to a first-place goal against opponents fitted to human statistics, and
+  then to library opponents") and Table 6 (TA-3: "opponents fitted to human statistics;
+  first-place goal"). It doesn't say how the goal was weighted or whether it replaced the
+  placement utility. TavernGym ships only the linear `placement_reward` (env.rs: 1st = 1 ... 8th
+  = -1). The paper's model weights are not released either (AutoTavern README: "The trained
+  TavernAgent, its weights and training code ... are not included"). Departure: our chain
+  (full-01 -> lib-01 -> lib-02) never had a first-place stage; the paper's library stages came
+  after one.
+
 For us: our hyperparameters are the paper's except volume, lr and the KL anchor. Volume is a
 gap of days to months on this PC, not years (one paper stage ~3 days, see the correction above).
 Its biggest lever, live-game recalibration, needs the live tool and Cranny's games. Our combat previews reseed every combat (`combat_preview`), the guard
