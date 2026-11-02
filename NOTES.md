@@ -977,6 +977,16 @@ while the library seats bring real boards that get stronger as the learners impr
 Departure: the paper's library stages use one learner and seven library seats, and it names no
 opponents for its first stages.
 
+**runs/scratch-01 started 2026-11-02 11:12**: from scratch, full-01's settings (full model,
+lr 3e-4 -> 1e-4 over 4000, 64 games, 4 learner seats, ent 0.002, seed 0, linear reward), except
+seats 4-7 are library seats instead of bots: real-train, `difficulty=-2`, `difficulty_min=-2`,
+up < 4.5, down > 5.0. Exam real-exam d 0/1/5, 256 games; bots and TavernBench as usual; 1000
+iterations. First 3: placement 6.39 / 6.31 / 6.25, entropy ~1.9, tier t2/t3/t4/t6/t8/t10 =
+1.19/1.34/1.57/2.05/2.63/3.26, ~46 s per iteration. At d = -2 the turn-8 boards given are ~12
+total stats, against a target of 2: `pick` caps scaling at 1/50, and every minion stays at
+least 1/1. The question: does early levelling survive while the placement improves? full-01
+lost it (t4 1.63 -> 1.00, t8 2.90 -> 2.15).
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
