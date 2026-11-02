@@ -643,6 +643,41 @@ Tier 4.7 at turn 8 and 5.2 at turn 10; lib-01 is on 2.0 and 2.0.
 boards; every minion is a TavernGym card. Median / mean by turn (train): t8 186 / 228, t10 799 /
 1,256, t12 3,366 / 6,778.
 
+All 1,000 replays (662 MB, 0 failed): **real-train 20,929 entries (798 games), real-exam 5,244
+(202 games)**. Exam median by turn: t8 192, t10 876, t12 3,283.
+
+## 2026-11-02: TavernBench, our AI vs the paper's LLMs
+
+The release has the paper's answers for TavernAgent, ten LLMs and Jev (results/eval). Scored
+with the benchmark's own code on the 23 decision scenarios our AI answers (`summarize`, run with
+`python -X utf8`: the answer files aren't cp1252):
+
+| system | decision | | system | decision |
+|---|---|---|---|---|
+| TavernAgent | 0.89 | | GLM 5.3 | 0.35 |
+| GPT-6 Astra | 0.58 | | **ours (lib-01, value / policy)** | **0.34 / 0.30** |
+| Claude Sonnet 5.5 | 0.49 | | Intern S2 preview | 0.31 |
+| Claude Opus 5.5 | 0.46 | | Jev | 0.30 |
+| GPT-6.1 Sol | 0.43 | | Kimi K2.6 | 0.26 |
+| Gemini 3.8 Flash | 0.40 | | chance | 0.24 |
+| | | | DeepSeek V4.1 Flash / Grok 4.7 | 0.23 / 0.17 |
+
+Over all 30 play scenarios (`report`): TavernAgent 0.91, GPT-6 Astra 0.63, Claude Sonnet 0.53,
+Opus 0.52. TavernAgent used 256-combat lookahead on the next-combat scenarios; ours is
+network-only, and our combat-preview check got 1.00 on those 18.
+
+## 2026-11-02: lib-02, real-board opponents
+
+Start point, lib-01 it 300 on real-exam (256 sampled games each; d0 = the exam's own median,
+d1 all players, d5 top 1%): **d0 5.31 ±0.18** (top-1 0.01, top-4 0.30), **d1 5.79 ±0.17** (0.01,
+0.18), **d5 6.74 ±0.14** (0.00, 0.04).
+
+**runs/lib-02 started 2026-11-02 ~04:20**: init_from lib-01 it 300, library real-train, exam
+real-exam at d 0/1/5 with 256 games (lib-01: 128), learner_seats=(0,), n_games 256, lr 2e-4,
+difficulty_up 4.5, 300 iterations. One variable against lib-01: the opponents' boards are real.
+First iterations: placement 5.56 / 5.63 / 5.42 at d = 0 (opponent turn 8 ~189), tier at turn 8
+2.00, ~60 s per iteration. The question: does the tier at turns 8-10 move off 2.0?
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
