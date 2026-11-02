@@ -1007,6 +1007,40 @@ it 80 (full-01, trained on them: 3.24). TavernBench flat: lookahead 0.83-0.84, l
 0.26-0.32. Watch next: if t4 keeps sliding toward full-01's ~1.25 by it 150, the bots were not
 the whole cause.
 
+**Check-in at it 180-210 (14:14-14:44): the levelling went anyway.** 10-iteration means, t2 / t4
+/ t8: it 100-109 1.19 / 1.40 / 3.00, it 130-139 1.12 / 1.29 / 2.70, it 170-179 1.07 / 1.21 /
+2.57; it 210 1.02 / 1.09 / 2.35, entropy 0.91. Placement 4.6-4.8 throughout, d -0.25 -> -0.20.
+Exam d0 / d1 / d5 at it 170: 6.41 / 6.49 / 7.10. Bots 3.27-3.39 (it 170-180). TavernBench flat
+(lookahead 0.83-0.84, long-term 0.27-0.31). So the bots were not the cause.
+
+**Does levelling pay inside TavernGym at all?** (scratchpad `level_pays.py`; no network.) Every
+tested seat is TavernGym's own scripted bot, one action at a time, with one change: seats 0-1
+are forced to level (when affordable, before the bot acts) to tier 2 by turn 2, 3 by 5, 4 by 6,
+5 by 8, 6 by 10 ("winner curve"); seats 2-3 have Upgrade hidden (price set to 99 for the turn,
+restored after) while at tier 1 before turn 6, 2 before 8, 3 before 12 (scratch-01's curve).
+Seats 4-7 are the opponents. Same lobbies for both curves, 1000 lobbies per row:
+
+| Opponents | Winner curve | AI's curve | Winner minus AI, same lobby | Top-1 winner / AI |
+|---|---|---|---|---|
+| Scripted bots | 4.66 ±0.11 | 4.69 ±0.09 | -0.03 ±0.15 | 0.143 / 0.090 |
+| Library real-train, d -0.2 (scratch-01's) | 5.48 ±0.08 | 5.16 ±0.07 | +0.33 ±0.12 | 0.004 / 0.011 |
+| Library real-exam, d 0 | 6.21 ±0.07 | 5.68 ±0.07 | +0.54 ±0.10 | 0.001 / 0.002 |
+| Library real-exam, d 1 | 6.26 ±0.07 | 5.77 ±0.07 | +0.49 ±0.10 | 0.002 / 0.002 |
+
+Tiers reached, both rows alike: winner curve t2/t4/t6/t8/t10 1.98/2.00/3.6/4.98/6.0, AI's
+curve 1.00/1.00/2.00/3.00/3.00. For a player that buys the biggest stats (the bot's rule: attack
++ health + 3 x tier), levelling like a real winner costs half a place against the real-board
+opponents we train on, and is a wash against bots (more first places, more bottom places). The
+AI not levelling is the right answer to its training world for a simple player; this matches the
+forced-levelling test on lib-02 (5.38 -> 6.02 at d 1). Two explanations, not yet separated:
+1. Levelling pays only for a player who uses the higher tiers well (tribes, triples, Discovers,
+   economy); a simple player, the bot or our young AI, never gets there. A local optimum: it
+   won't level until it can use tiers 4-6, and can't learn them without levelling.
+2. The library seats punish early levelling harder than real lobbies do: every turn they get a
+   board on the curve and never pay the tempo of their own levelling turns.
+Next: real lobbies (the seven other players in the Perfect Games) to see whether faster
+levelling goes with better placement there; then research before any training change.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
