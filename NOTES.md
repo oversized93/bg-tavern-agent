@@ -744,6 +744,20 @@ Table 7 (final stage, TA-23) against our config:
   TavernAgent, its weights and training code ... are not included"). Departure: our chain
   (full-01 -> lib-01 -> lib-02) never had a first-place stage; the paper's library stages came
   after one.
+- Full pass over AutoTavern at fb61201 (2026-11-02, Cranny's prompt: TAVERNGYM.md). Read the
+  README, TAVERNGYM.md, ARCHITECTURE.md and TAVERNBENCH.md, and searched the source (RulesConfig,
+  the Python bindings, batch.rs, env.rs), the v1.0.0 release, the branches and the issues.
+  Upstream has no newer commits, no other branch, no wiki, and only two unrelated issues. The
+  only reward is the linear placement reward (TAVERNGYM.md "Batched environment"; env.rs
+  `placement_reward`); RulesConfig has no reward fields. The release notes repeat: "The trained
+  agent, its weights and training code are not included." Useful for us:
+  - `step` returns each seat's final placement (`info["placement"]`), and ppo.py already adds
+    the end reward itself, so a first-place goal needs no simulator change.
+  - ARCHITECTURE.md "Determinism": "a rollout from [a copy] sees the original's future Taverns
+    and Discovers unless the copy gets a fresh Rng". This is the paper's copied-game leak. The
+    live tool's lookahead must reseed shops and Discovers, not just combats.
+  - TAVERNBENCH.md: the N1/N2 turn plans were "cut from natural games, each played out 128
+    times", and the hero and trinket picks are scored against top human players.
 
 For us: our hyperparameters are the paper's except volume, lr and the KL anchor. Volume is a
 gap of days to months on this PC, not years (one paper stage ~3 days, see the correction above).
