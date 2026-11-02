@@ -900,6 +900,52 @@ Success: the tier at turn 8 above 2 and first place on the real exam above 3%, w
 else falling. If the tier hasn't moved by it 100, the reward alone isn't the lever; next is
 the paper-scale run (~1M decisions per iteration, lower lr, ~3 days per stage).
 
+## 2026-11-02: why it never levels (Cranny: "winning so many games but never tiering up")
+
+**It never tries.** lib-02 it 275 against real-exam at d = 1, 256 sampled games per variant,
+same lobbies (scratchpad forced_level.py). Its own P(Upgrade) at the first legal chance of the
+turn: turn 2 mean 1.3e-8 (max 7.6e-8, n = 251), turns 3 and 4 ~1e-18. Over lib-03's ~77k games
+that is ~0.001 expected early level-ups: the first-place reward can't reach turn-2 levelling.
+
+**Forcing it to level makes it worse** (it never learned to play a levelled game):
+
+| variant | placement | top-1 | top-4 | tier t4 / t8 / t10 |
+|---|---|---|---|---|
+| as it plays | 5.38 ±0.19 | 0.020 | 0.27 | 1.00 / 1.06 / 1.94 |
+| Upgrade first on turn 2 | 6.02 ±0.17 | 0.008 | 0.15 | 1.98 / 1.98 / 2.91 |
+| Upgrade first on turns 2, 4, 6 | 6.32 ±0.18 | 0.008 | 0.13 | 2.98 / 3.68 / 3.64 |
+
+(A 16-game first try gave 6.25 / 6.50 / 7.38: noise, kept only as the smoke test.)
+
+**Where the habit came from: the scripted bots.** full-01 (from scratch, 4 learner seats + 4
+bots) levelled early while it was near-random and unlearned it while it learned to beat the
+bots (means over 10 iterations):
+
+| full-01 it | tier t4 | t6 | t8 | t10 | placement | entropy |
+|---|---|---|---|---|---|---|
+| 1 | 1.63 | 2.20 | 2.90 | 3.55 | 6.44 | 1.90 |
+| 50 | 1.29 | 2.08 | 2.89 | 3.59 | 4.13 | 1.61 |
+| 150 | 1.12 | 2.01 | 2.59 | 2.99 | 3.55 | 1.46 |
+| 300 | 1.02 | 1.94 | 2.10 | 2.20 | 3.45 | 1.26 |
+| 480 | 1.00 | 1.96 | 2.15 | 3.10 | 3.27 | 1.09 |
+
+lib-01 and lib-02 then pushed the turn-8 tier from 2.0 to 1.1.
+
+**Research:**
+- The paper never trained against scripted bots. They are a baseline only (0.0% first places
+  against its reality-calibrated opponents). "Learning started from scratch on a simplified rule
+  set, moved to the full content, then to the player's view", then library seats ("Rather than
+  self-play, the learner faces seven library seats"), graded "from aligned libraries to harder
+  ones". It says nothing about exploration or entropy, and nothing about how its agent learned
+  tier timing.
+- Departure we made: `opponents=mixed` (bots + learners) for the foundation. CLAUDE.md records
+  why: bots alone gave no signal, and self-play plateaued at 6.9.
+- Literature: "primacy bias", where an agent overfits its earliest experience and that harms
+  everything after (Nikishin et al., ICML 2022, arXiv 2205.07802; remedy: re-initialise the
+  last layers). PPO also loses plasticity under non-stationary training (Moalla et al.,
+  NeurIPS 2024, arXiv 2405.00662). Entropy bonuses can't revive an action at P ~ 1e-8: the
+  softmax gradient scales with p.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
