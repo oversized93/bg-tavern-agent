@@ -716,9 +716,17 @@ Table 7 (final stage, TA-23) against our config:
   Graded libraries run "from aligned libraries to harder ones with venomous minions, hands and
   ceiling builds". No search or simulation in training, no imitation, no pretraining.
 - Compute (Appendix F): eight H200s and 128 CPU cores; ~1,900 GPU-hours for the 23 delivered
-  stages, ~16,700 for everything else, ~1,300 for evaluation; 20 days in all. An H200 has
-  roughly 10x a 3070's tensor throughput and memory bandwidth, so the delivered stages alone are
-  on the order of 20,000 hours of this PC (a rough estimate), plus a 5x bigger CPU.
+  stages, ~16,700 for everything else, ~1,300 for evaluation; 20 days in all.
+  **Corrected the same day:** this note first scaled the GPU-hours by an H200's ~10x hardware
+  edge and said "~20,000 hours of this PC". Wrong: count practice, not hardware. Same-size model
+  (18M vs 16.9M). lib-02 makes 65,755 decisions per iteration in 57.8 s (medians over 179
+  iterations; 35.7 s playing games, 22.1 s learning), ~4.1M decisions an hour. One 310M-decision
+  stage is ~76 hours of this PC (~3 days); 23 stages of that size (~7.1B decisions) ~1,740 hours
+  (~73 days nonstop). The paper's own pace, ~7.1B / 1,900 GPU-hours, is ~3.7M decisions per
+  GPU-hour: each of their GPUs produced about what this PC does. Assumes every delivered stage
+  was the final one's size; the paper's Table 7 covers the final stage only. The other ~16,700
+  GPU-hours were experiments whose answers the paper gives us. lib-01 and lib-02 each had ~20M
+  decisions: ~6% of one paper stage.
 - What mattered most: recalibrating the libraries to the opponents met in live games, "the
   largest single gain" (Table 3, same checkpoint and budget: first place 20.9% -> 27.2% on the
   main exam, 10.3% -> 13.5% on the harder one).
@@ -727,9 +735,9 @@ Table 7 (final stage, TA-23) against our config:
   snapshots overstated gains (winner's curse); one version doubled its exam first-place rate and
   then lost ~1,300 rating live, from an early/mid-game weakness the exam hid.
 
-For us: our hyperparameters are the paper's except volume, lr and the KL anchor. We can't buy the
-paper's strength with volume on one PC; its biggest lever, live-game recalibration, needs the live
-tool and Cranny's games. Our combat previews reseed every combat (`combat_preview`), the guard
+For us: our hyperparameters are the paper's except volume, lr and the KL anchor. Volume is a
+gap of days to months on this PC, not years (one paper stage ~3 days, see the correction above).
+Its biggest lever, live-game recalibration, needs the live tool and Cranny's games. Our combat previews reseed every combat (`combat_preview`), the guard
 against their copied-game leak; the live tool must keep that.
 
 ## 2026-11-02: lib-02, real-board opponents
@@ -743,6 +751,22 @@ real-exam at d 0/1/5 with 256 games (lib-01: 128), learner_seats=(0,), n_games 2
 difficulty_up 4.5, 300 iterations. One variable against lib-01: the opponents' boards are real.
 First iterations: placement 5.56 / 5.63 / 5.42 at d = 0 (opponent turn 8 ~189), tier at turn 8
 2.00, ~60 s per iteration. The question: does the tier at turns 8-10 move off 2.0?
+
+Check-in at it 179 (07:12), means over 20 iterations:
+
+| iterations | tier t8 | board t8 | entropy | training placement |
+|---|---|---|---|---|
+| 1-20 | 2.01 | 6.27 | 0.75 | 5.50 |
+| 61-80 | 2.00 | 6.16 | 0.63 | 5.40 |
+| 121-140 | 1.99 | 6.07 | 0.57 | 5.38 |
+| 161-179 | 1.92 | 6.08 | 0.54 | 5.30 |
+
+Exam it 130-170: d0 5.18-5.36, d1 5.62-5.80, d5 6.46-6.74 (start 5.31 / 5.79 / 6.74). Bots
+2.17-2.32. TavernBench value 0.31-0.35. Placement improves a little while the tier at turn 8
+drifts *down* and entropy falls steadily: the run is polishing the stay-low plan, not finding
+levelling. Untested guess: small batches at a high lr commit early. The real pace including
+evals is 1.31 min per iteration (the ~60 s above leaves the evals out), so the run ends about
+09:50, not the 08:20 I told Cranny.
 
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
