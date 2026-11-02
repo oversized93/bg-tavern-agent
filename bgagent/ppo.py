@@ -680,11 +680,13 @@ class Trainer:
                     self.metrics.write(json.dumps({"iteration": self.it, **b}) + "\n")
                     self.metrics.flush()
                     if self.tb:
-                        for k in ("bench_value", "bench_policy"):
+                        for k in ("bench_value", "bench_policy", "bench_lookahead",
+                                  "bench_policy_long_term"):
                             self.tb.add_scalar(f"tavernbench/{k}", b[k], self.it)
                     print(f"     TavernBench decisions: value {b['bench_value']:.2f}  "
-                          f"policy {b['bench_policy']:.2f}  (chance 0.24, TavernAgent 0.89)",
-                          flush=True)
+                          f"policy {b['bench_policy']:.2f}  lookahead {b['bench_lookahead']:.2f}  "
+                          f"long-term {b['bench_policy_long_term']:.2f}  (chance 0.24 / 0.27, "
+                          f"TavernAgent 0.89 / 0.54)", flush=True)
             self.maybe_snapshot()
             if self.it % cfg.checkpoint_every == 0 or self.it == cfg.iterations:
                 self.save()

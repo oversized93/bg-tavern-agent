@@ -65,10 +65,15 @@ def main():
             print(f"  it {r['iteration']:4d}: {r['eval_avg_placement']:.2f} "
                   f"±{r['eval_ci95']:.2f}  top1 {r['eval_top1']:.2f}  top4 {r['eval_top4']:.2f}")
     if bench:
-        print("TavernBench decisions (higher is better; chance 0.24, TavernAgent 0.89):")
+        print("TavernBench decisions (higher is better; chance 0.24, TavernAgent 0.89; long-term: "
+              "hero, trinket, discover, turn plans, chance 0.27, TavernAgent 0.54):")
         for r in bench[-5:]:
+            extra = ""
+            if "bench_lookahead" in r:  # logged since 2026-11-02
+                extra = (f"  lookahead {r['bench_lookahead']:.2f}  "
+                         f"long-term {r['bench_policy_long_term']:.2f}")
             print(f"  it {r['iteration']:4d}: value {r['bench_value']:.2f}  "
-                  f"policy {r['bench_policy']:.2f}")
+                  f"policy {r['bench_policy']:.2f}{extra}")
     age = datetime.now() - datetime.strptime(last["time"], "%Y-%m-%d %H:%M:%S")
     if age.total_seconds() > max(3 * sec, 600):
         print(f"WARNING: no new iteration for {age}; the run may have stopped")

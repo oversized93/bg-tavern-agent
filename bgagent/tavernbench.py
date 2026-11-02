@@ -1,4 +1,4 @@
-"""Answer TavernBench decision tasks with a trained policy (no simulation, no search).
+"""Answer TavernBench decision tasks with a trained policy, alone or with combat lookahead.
 
 TavernBench ships with AutoTavern (tavernbench/ in a checkout of the commit pinned in
 pyproject.toml). 288 of its 368 evaluation tasks come with the saved game they were cut from
@@ -26,6 +26,15 @@ Two ways to pick an option, both from the network alone:
           choice (D1) and warband arrangement (P1-P5) have no single action sequence per
           option, so they fall back to the value.
 
+A third, the paper's way (Section 7: "it applies each option and simulates 256 combats after
+it (one-step lookahead)"):
+  lookahead  the 18 scenarios that ask what wins the next combat (D3, D5, E3, O1-5, P1-5,
+             T1-5): the option whose position wins most of 256 simulated combats; the five
+             long-term ones (D1, D2, D4, N1, N2): the policy's pick. This is what the overlay
+             would do, and the score to put next to TavernAgent's.
+The five long-term scenarios are also averaged on their own (`long_term`): no simulation of
+the next fight answers them, so they are what training has to teach.
+
 Answers are written in the benchmark's answers.jsonl format and scored with TavernBench's
 own scoring code.
 """
@@ -45,6 +54,11 @@ DECISION_SCENARIOS = (
     [f"D{i}" for i in range(1, 6)] + ["E3"] + [f"P{i}" for i in range(1, 6)]
     + [f"O{i}" for i in range(1, 6)] + [f"T{i}" for i in range(1, 6)] + ["N1", "N2"]
 )
+# Decided by the next combat (labels from simulated combats after each option)...
+NEXT_COMBAT = tuple(s for s in DECISION_SCENARIOS if s not in ("D1", "D2", "D4", "N1", "N2"))
+# ...and by the final placement: hero, trinket, discover for the end result, turn plans.
+LONG_TERM = ("D1", "D2", "D4", "N1", "N2")
+LOOKAHEAD_COMBATS = 256  # the paper's
 
 
 def import_bench(bench_dir):
@@ -176,6 +190,13 @@ class Scorer:
     def by_value(self, opts):
         return max(opts, key=lambda o: o.value).answer if opts else None
 
+    def by_sim(self, opts, n=LOOKAHEAD_COMBATS):
+        """The option whose resulting position wins most of `n` simulated next combats."""
+        if not opts:
+            return None
+        win = [self.E.preview(self.E.from_state(o.states[-1]), n=n)["win"] for o in opts]
+        return opts[max(range(len(opts)), key=win.__getitem__)].answer
+
     def by_policy(self, opts):
         """What the policy does when only the task's options are open to it: at each step, its
         most likely next action among those that keep some option alive, where an option that
@@ -210,12 +231,14 @@ def answer_set(policy, set_dir, bench_dir, device="cpu", scenarios=None, log=pri
     prompts, _, states = load_set(set_dir)
     scorer = Scorer(policy, engine, device)
     wanted = set(scenarios or DECISION_SCENARIOS)
-    answers = {"value": {}, "policy": {}}
+    answers = {"value": {}, "policy": {}, "lookahead": {}}
     details = []
     ids = [i for i in prompts if prompts[i]["scenario"] in wanted and i in states]
     for n, tid in enumerate(ids, 1):
         opts = scorer.options(states[tid])
         picks = {"value": scorer.by_value(opts), "policy": scorer.by_policy(opts)}
+        picks["lookahead"] = (scorer.by_sim(opts) if prompts[tid]["scenario"] in NEXT_COMBAT
+                              else picks["policy"])
         for mode, a in picks.items():
             if a is not None:
                 answers[mode][tid] = a
@@ -254,7 +277,9 @@ def summarize(report, set_dir, answers_path, scenarios=None):
     for s in wanted:
         cats.setdefault(report.CATS[s[0]], []).append(acc[s])
     full = report.summarize(acc)
+    long_term = [s for s in wanted if s in LONG_TERM]
     return {"decision": sum(acc[s] for s in wanted) / len(wanted), "play": full["play"],
+            "long_term": sum(acc[s] for s in long_term) / len(long_term) if long_term else None,
             "by_category": {c: sum(v) / len(v) for c, v in cats.items()},
             "by_scenario": {s: acc[s] for s in wanted}}
 
@@ -271,5 +296,6 @@ def bench_eval(policy, bench_dir, out_dir, device="cpu"):
         write_answers(path, a, mode)
         s = summarize(report, set_dir, path)
         out[f"bench_{mode}"] = round(s["decision"], 4)
+        out[f"bench_{mode}_long_term"] = round(s["long_term"], 4)
         out.update({f"bench_{mode}_{c}": round(v, 4) for c, v in s["by_category"].items()})
     return out

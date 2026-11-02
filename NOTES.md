@@ -666,13 +666,39 @@ Over all 30 play scenarios (`report`): TavernAgent 0.91, GPT-6 Astra 0.63, Claud
 Opus 0.52. TavernAgent used 256-combat lookahead on the next-combat scenarios; ours is
 network-only, and our combat-preview check got 1.00 on those 18.
 
+**Scored the paper's way** (`lookahead` mode in bgagent/tavernbench.py: 256 simulated combats per
+option on the 18 next-combat scenarios, the policy on the other five), lib-01 it 300:
+
+| system | decision (23) | long-term (5) | select | econ | position | order | targets | strategy |
+|---|---|---|---|---|---|---|---|---|
+| chance | 0.24 | 0.27 | 0.30 | 0.12 | 0.20 | 0.21 | 0.25 | 0.25 |
+| TavernAgent | 0.89 | 0.54 | 0.64 | 1.00 | 0.97 | 1.00 | 0.97 | 0.75 |
+| GPT-6 Astra | 0.58 | 0.44 | 0.50 | 0.75 | 0.55 | 0.72 | 0.55 | 0.54 |
+| Claude Opus 5.5 | 0.46 | 0.31 | 0.41 | 0.50 | 0.33 | 0.60 | 0.53 | 0.38 |
+| ours, policy | 0.30 | 0.35 | 0.36 | 0.00 | 0.30 | 0.25 | 0.40 | 0.21 |
+| **ours, lookahead** | **0.85** | 0.35 | 0.66 | 1.00 | 0.97 | 1.00 | 0.97 | 0.21 |
+
+The five long-term scenarios, which no next-combat simulation answers (tasks: D1 8, D2 8, D4 16,
+N1 29, N2 27):
+
+| | D1 hero | D2 trinket | D4 discover | N1 turn plan | N2 turn plan |
+|---|---|---|---|---|---|
+| chance | 0.25 | 0.25 | 0.33 | 0.25 | 0.25 |
+| TavernAgent | 0.25 | 0.12 | 0.81 | 0.83 | 0.67 |
+| ours, policy | 0.50 | 0.38 | 0.44 | 0.24 | 0.19 |
+
+With the paper's lookahead the tool is at 0.85 against TavernAgent's 0.89. The whole remaining gap
+is long-term judgment: turn plans (N1/N2, 56 tasks, ours at chance) and the final-placement
+discover. That is what training has to teach. Training logs `lookahead` and `long-term` from now
+on (runs started before this change log value / policy only).
+
 ## 2026-11-02: lib-02, real-board opponents
 
 Start point, lib-01 it 300 on real-exam (256 sampled games each; d0 = the exam's own median,
 d1 all players, d5 top 1%): **d0 5.31 ±0.18** (top-1 0.01, top-4 0.30), **d1 5.79 ±0.17** (0.01,
 0.18), **d5 6.74 ±0.14** (0.00, 0.04).
 
-**runs/lib-02 started 2026-11-02 ~04:20**: init_from lib-01 it 300, library real-train, exam
+**runs/lib-02 started 2026-11-02 03:16**: init_from lib-01 it 300, library real-train, exam
 real-exam at d 0/1/5 with 256 games (lib-01: 128), learner_seats=(0,), n_games 256, lr 2e-4,
 difficulty_up 4.5, 300 iterations. One variable against lib-01: the opponents' boards are real.
 First iterations: placement 5.56 / 5.63 / 5.42 at d = 0 (opponent turn 8 ~189), tier at turn 8

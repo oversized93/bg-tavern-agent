@@ -8,9 +8,10 @@ scoring code and the paper's released answers live there, not in the pip package
     git clone https://github.com/MCG-NJU/AutoTavern ~/AutoTavern
     git -C ~/AutoTavern checkout fb61201a557ddd36a411cf44aac51ce4d9b606ce
 
-Answers the 23 decision scenarios two ways (bgagent/tavernbench.py): by the value head after
-each option ("value") and by the policy's probability of each option ("policy"). Writes
-answers_value.jsonl, answers_policy.jsonl and details.jsonl to --out, and prints the
+Answers the 23 decision scenarios three ways (bgagent/tavernbench.py): by the value head after
+each option ("value"), by the policy's probability of each option ("policy"), and the paper's
+way ("lookahead": 256 simulated combats per option where the next combat decides, the policy
+elsewhere). Writes answers_<mode>.jsonl and details.jsonl to --out, and prints the
 benchmark's accuracy next to the released systems' on the same scenarios. "play" is the
 paper's 30-scenario score: the seven combat-fact scenarios we don't answer count as wrong.
 """
@@ -29,7 +30,7 @@ CAT_ORDER = ["selection", "economy", "positioning", "ordering", "targets", "stra
 
 def row(name, s):
     cats = " ".join(f"{s['by_category'].get(c, float('nan')):5.2f}" for c in CAT_ORDER)
-    return f"{name:24s} {s['decision']:6.2f} {s['play']:5.2f}  {cats}"
+    return f"{name:24s} {s['decision']:6.2f} {s['long_term']:5.2f} {s['play']:5.2f}  {cats}"
 
 
 def main():
@@ -66,12 +67,14 @@ def main():
         results[f"ours ({mode})"] = TB.summarize(report, set_dir, out / f"answers_{mode}.jsonl")
     (out / "summary.json").write_text(json.dumps(results, indent=1))
 
-    print(f"\n{'system':24s} decis.  play  " + " ".join(f"{c[:5]:>5s}" for c in CAT_ORDER))
+    print(f"\n{'system':24s} decis. long  play  " + " ".join(f"{c[:5]:>5s}" for c in CAT_ORDER))
     for name, s in results.items():
         print(row(name, s))
-    print("\ndecis. = mean accuracy over the 23 decision scenarios; play = the paper's 30 "
-          "play scenarios\n(combat facts we don't answer count as wrong). By scenario: "
-          f"{out / 'summary.json'}")
+    print("\ndecis. = mean accuracy over the 23 decision scenarios; long = the five long-term ones "
+          "(hero, trinket,\nfinal-placement discover, turn plans); play = the paper's 30 play "
+          "scenarios (combat facts we\ndon't answer count as wrong). lookahead = 256 simulated "
+          f"combats on the 18 next-combat\nscenarios, the policy on the rest (the paper's way). "
+          f"By scenario: {out / 'summary.json'}")
 
 
 if __name__ == "__main__":
