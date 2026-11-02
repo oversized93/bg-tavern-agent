@@ -614,6 +614,35 @@ replay, one request per 2 s.
 Use, per the paper and Cranny's rule: opponent boards (library entries) and evaluation only,
 never the winners' moves as training targets.
 
+**Replay reader** (`bgagent/replay.py`): Battlegrounds plays turn k as game TURN 2k-1 (Tavern)
+and 2k (combat). At each even TURN: the winner's minions in play (its board entering combat),
+its Tier and hero; the opponent's board is the minions the game creates on the opponent side
+(controller 9, zone PLAY) in the first top-level block of that TURN that creates any. A
+minion is created with its card's base stats and the same block then sets the real ones (seen:
+BG31_801_G created 2/2, set to 15/13), so the board is read when that block ends; first try,
+reading at creation, gave turn-10 opponents 34 total stats. Later blocks are summons in the
+fight. The opponent's Tier is on a hidden copy of its hero the game gives the winner (zone
+SETASIDE, PLAYER_TECH_LEVEL). Player names are blanked before parsing: one replay had an
+unescaped `name=""Lich King" Deryl"` that broke the XML. ~0.1 s per replay (8 processes).
+
+Check against Firestone, first 300 replays (mean warband stats; Firestone's is per player-game):
+
+| turn | 6 | 8 | 10 | 12 | 14 |
+|---|---|---|---|---|---|
+| opponents in the replays | 63 | 175 | 712 | 3,604 | 11,696 |
+| Firestone all players | 73 | 230 | 977 | 3,335 | 6,553 |
+| winners in the replays | 86 | 282 | 1,806 | 11,595 | 32,089 |
+| opponents' Tier (known 88-98%) | 3.62 | 4.70 | 5.24 | 5.55 | 5.74 |
+| winners' Tier | 3.63 | 4.93 | 5.58 | 5.77 | 5.86 |
+
+The opponents sit near the all-players mean, the winners well above it. Real players are on
+Tier 4.7 at turn 8 and 5.2 at turn 10; lib-01 is on 2.0 and 2.0.
+
+`scripts/build_real_library.py` on the first 536 replays: 0 failed, 42 s; 11,159 train entries
+(425 games) and 2,865 exam (111 games, split by a hash of the reviewId), winners' and opponents'
+boards; every minion is a TavernGym card. Median / mean by turn (train): t8 186 / 228, t10 799 /
+1,256, t12 3,366 / 6,778.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.

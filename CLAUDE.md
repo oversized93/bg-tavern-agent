@@ -36,6 +36,11 @@ Power.log to suggest moves. Cranny plays every game himself.
   turn their board, hand, Tier and buff counters are replaced (BatchEnv save/load) with an
   entry matched to a target strength curve, on a difficulty ladder from the library's own
   median up to Firestone's top-1% curve. `opponents=library`, `library_path`, `exam_path`.
+- `bgagent/replay.py`: real games. Reads HSReplay XML (Firestone's Perfect Games replays): at
+  each combat the main player's board as it entered and the opponent's board as the game
+  created it (stats read when that block ends: minions are created with base stats), Tiers,
+  heroes. `EntryBuilder` turns boards into library entries through TavernGym's debug
+  commands. Player names and account ids are never read (names are blanked before parsing).
 - `bgagent/human.py`: Firestone reference curves (warband strength by turn per MMR bracket),
   read from `data/firestone` (fetched by `scripts/fetch_firestone.py`, not in git).
 - `scripts/`: train.py, evaluate.py, advise.py, status.py, tavernbench.py, fetch_firestone.py,
@@ -56,6 +61,8 @@ Power.log to suggest moves. Cranny plays every game himself.
 - Human data: `python scripts/fetch_firestone.py` (cached 12 h; data/firestone)
 - Real games: `python scripts/fetch_perfect_games.py` (Firestone's Perfect Games: first-place
   replays, ~1 MB each, one request per 2 s; data/firestone/perfect)
+- Real-board libraries: `python scripts/build_real_library.py` (data/library/real-train and
+  real-exam, split by game; `--min-rank 6814` for top-25% games)
 - Library: `python scripts/build_library.py --out data/library/train.jsonl.gz --games 1000
   --seed 1 --policy runs/full-01/policy_00500.pt:0,1,2,3` (exam: other seed and policies)
 
