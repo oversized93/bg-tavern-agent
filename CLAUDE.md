@@ -54,6 +54,8 @@ Power.log to suggest moves. Cranny plays every game himself.
 - Is it learning? `python scripts/diagnose.py random runs/<name>/policy_00050.pt`
   (placement vs bots lags far behind; warband size and tier by turn move first)
 - Human data: `python scripts/fetch_firestone.py` (cached 12 h; data/firestone)
+- Real games: `python scripts/fetch_perfect_games.py` (Firestone's Perfect Games: first-place
+  replays, ~1 MB each, one request per 2 s; data/firestone/perfect)
 - Library: `python scripts/build_library.py --out data/library/train.jsonl.gz --games 1000
   --seed 1 --policy runs/full-01/policy_00500.pt:0,1,2,3` (exam: other seed and policies)
 

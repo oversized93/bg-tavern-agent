@@ -590,6 +590,30 @@ its own start), but the learner found a cheaper local optimum, not the human one
 the late game never punishes a tier-2 board, and the ladder can't climb past where the learner
 holds even. The exam at d1 never moved.
 
+## 2026-11-02: Firestone's Perfect Games (real boards; missed until now)
+
+The library above was built from our own agent's simulated boards scaled up to Firestone's
+curves, so every opponent was a stretched copy of a tier-2 flood. Real boards were the first
+thing on the list for Firestone and its permission covers them; only the stats files had been
+pulled. Cranny caught it.
+
+Firestone's app has a "Perfect Games" tab (`bgs-perfect-games.service.ts`):
+`static.zerotoheroes.com/api/bgs/bgs-perfect-games.json` lists the newest 1,000 first-place
+games, each with a `replayKey`; the replay viewer loads `xml.firestoneapp.com/<replayKey>`, a
+zipped HSReplay XML of the whole game (~1 MB zipped, ~19 MB unzipped): every turn of the
+winner's board, hand, Gold and Tier, every opponent's board at each combat, and the winner's
+choices. The list's own `postMatchStats` holds only the final board.
+
+The list on 2026-11-02: 1,000 games from 10-28 to 11-02, build 255790 (TavernGym's cards are
+253932), player rating quartiles 5,522 / 6,230 / 6,766 (max 18,778; Firestone's top 50% starts
+at 6,283). Every minion on the 1,000 final boards (6,816, 462 distinct) is in TavernGym's
+catalog; 997 of 1,000 heroes. `scripts/fetch_perfect_games.py` merges the list into
+data/firestone/perfect/games.jsonl (it keeps moving, so repeated runs grow it) and downloads each
+replay, one request per 2 s.
+
+Use, per the paper and Cranny's rule: opponent boards (library entries) and evaluation only,
+never the winners' moves as training targets.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
