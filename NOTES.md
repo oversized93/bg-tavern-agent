@@ -692,6 +692,46 @@ is long-term judgment: turn plans (N1/N2, 56 tasks, ours at chance) and the fina
 discover. That is what training has to teach. Training logs `lookahead` and `long-term` from now
 on (runs started before this change log value / policy only).
 
+## 2026-11-02: the paper's training recipe vs ours (research, from the arXiv HTML)
+
+Table 7 (final stage, TA-23) against our config:
+
+| | paper | ours (lib-02) |
+|---|---|---|
+| minibatch / epochs | 8,192 / 1 | same |
+| clip / target KL | 0.2 / 0.05 | same |
+| gamma / lambda | 1.0 / 0.995 | same |
+| grad clip | 1.0 | same |
+| entropy / value / aux coef | 0.002 / 0.5 / 0.1 | same |
+| reward | terminal placement utility | same (no shaping) |
+| model | entity transformer, d 384, 8 layers, 18M | entity transformer, 16.9M |
+| decisions per iteration | ~1.05M (512 games x 256 steps) | ~66k |
+| per stage | 300 iterations, ~310M decisions, ~570k games | 300 iterations, ~20M |
+| lr | 6e-6 -> 5e-6 (final stage) | 2e-4 -> ~1.9e-4 |
+| KL anchor to the stage's start | 0.1 for the first 100 iterations | none |
+
+- Stages: from scratch on simplified rules, then full content, the player's view, a first-place
+  goal against opponents fitted to human statistics, then library opponents; later versions are
+  chains of 300-iteration stages, each starting from the previous one under the KL anchor.
+  Graded libraries run "from aligned libraries to harder ones with venomous minions, hands and
+  ceiling builds". No search or simulation in training, no imitation, no pretraining.
+- Compute (Appendix F): eight H200s and 128 CPU cores; ~1,900 GPU-hours for the 23 delivered
+  stages, ~16,700 for everything else, ~1,300 for evaluation; 20 days in all. An H200 has
+  roughly 10x a 3070's tensor throughput and memory bandwidth, so the delivered stages alone are
+  on the order of 20,000 hours of this PC (a rough estimate), plus a 5x bigger CPU.
+- What mattered most: recalibrating the libraries to the opponents met in live games, "the
+  largest single gain" (Table 3, same checkpoint and budget: first place 20.9% -> 27.2% on the
+  main exam, 10.3% -> 13.5% on the harder one).
+- Their pitfalls: a search over copied games seemed to add 23.6 points of first-place rate but
+  read the copies' future random numbers (reseeding: -0.65 ± 1.14); picking the best of many
+  snapshots overstated gains (winner's curse); one version doubled its exam first-place rate and
+  then lost ~1,300 rating live, from an early/mid-game weakness the exam hid.
+
+For us: our hyperparameters are the paper's except volume, lr and the KL anchor. We can't buy the
+paper's strength with volume on one PC; its biggest lever, live-game recalibration, needs the live
+tool and Cranny's games. Our combat previews reseed every combat (`combat_preview`), the guard
+against their copied-game leak; the live tool must keep that.
+
 ## 2026-11-02: lib-02, real-board opponents
 
 Start point, lib-01 it 300 on real-exam (256 sampled games each; d0 = the exam's own median,
