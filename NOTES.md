@@ -436,6 +436,29 @@ strength curve for library opponents.
 Decision (Cranny): no training on human moves; human data calibrates opponents and evaluation
 only, as in the paper.
 
+## 2026-11-01: full-01 at 500 iterations (~33M decisions), the review
+
+- vs bots, training eval (256 sampled): 2.55 ±0.17, top-1 0.25, top-4 0.91 (its best).
+- vs bots, greedy, 1,000 games: **2.88 ±0.09**, top-1 0.20, top-4 0.86. Same as g1's 2.94
+  (tiny model, CPU, it 200): 8x more decisions per iteration and a 40x bigger model bought
+  nothing measurable against the bots. Sampled beats greedy here (2.55 vs 2.88).
+- Head to head (greedy, 512 games each): it 500 among seven it-250s **3.78 ±0.19**; among seven
+  it-100s **3.71 ±0.18**. It did get stronger (0.7-0.8 places better than 4.5 against its own
+  past), but no more against it 100 than against it 250.
+- TavernBench at it 500: value 0.37, policy 0.33; flat since it 30 (policy 0.28-0.35).
+- Warband stats by turn at it 500 match it 475 (turn 8 206, 10 350, 12 538 vs top 1% 328,
+  1,793, 5,951); it levels a little sooner late (tier 3.36 at turn 10, was 2.88).
+- One crash (it 268, float16 overflow, fixed above); otherwise kl 0.003-0.009, entropy
+  1.50 -> 1.08, no early stops.
+
+**Verdict:** the bots are spent as teachers. More iterations still improve it against itself,
+but none of it shows up on TavernBench or against the human strength curve, and the model size
+made no difference against the bots. Next is the paper's opponent: library seats calibrated to
+Firestone's warband curve. TavernGym has no library-seat hook: `Game.debug` can edit boards
+(not on the RL hot path), and `BatchEnv.save`/`load` round-trip a game's JSON, so library
+seats mean either rewriting seat boards in the saved state between turns or a small
+`set_board` addition to the engine. full-01 stays stopped at 500 until that is built.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
