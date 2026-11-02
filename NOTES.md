@@ -932,8 +932,11 @@ bots (means over 10 iterations):
 lib-01 and lib-02 then pushed the turn-8 tier from 2.0 to 1.1.
 
 **Research:**
-- The paper never trained against scripted bots. They are a baseline only (0.0% first places
-  against its reality-calibrated opponents). "Learning started from scratch on a simplified rule
+- **Corrected the same day:** I first wrote, and told Cranny, "the paper never trained against
+  scripted bots". It doesn't say. A second read finds no opponent named for its first three
+  stages (from scratch / full content / player's view); TA-3 has "opponents fitted to human
+  statistics"; library seats come after. Scripted bots appear only as a baseline (0.0% first
+  places against its reality-calibrated opponents). "Learning started from scratch on a simplified rule
   set, moved to the full content, then to the player's view", then library seats ("Rather than
   self-play, the learner faces seven library seats"), graded "from aligned libraries to harder
   ones". It says nothing about exploration or entropy, and nothing about how its agent learned
@@ -945,6 +948,34 @@ lib-01 and lib-02 then pushed the turn-8 tier from 2.0 to 1.1.
   last layers). PPO also loses plasticity under non-stationary training (Moalla et al.,
   NeurIPS 2024, arXiv 2405.00662). Entropy bonuses can't revive an action at P ~ 1e-8: the
   softmax gradient scales with p.
+
+## 2026-11-02: a fresh start without bots (Cranny: "Yes")
+
+lib-03 was stopped at it 40 (latest.pt; tier t4/t6/t8/t10 1.00/1.01/1.07/1.94, training
+placement 5.52 at d = 1). Nothing moved, as P(Upgrade) ~1e-8 predicted.
+
+**Easier opponents** (`Difficulty.target`, `difficulty_min`): below d = 0 the library's median
+boards are scaled down by 10**d. Where does a beginner place? 128 games each, real-train
+library, one tested seat against seven library seats:
+
+| d | turn-8 target | uniform random play | untrained full network |
+|---|---|---|---|
+| 0 | 185 | 8.00 | 7.99 |
+| -0.5 | 59 | 7.88 | 7.99 |
+| -1 | 18 | 7.31 | 7.85 |
+| -1.5 | 6 | 6.96 | 7.74 |
+| -2 | 2 | 6.81 (top-4 0.10) | 7.77 (top-4 0.01) |
+
+Even boards scaled to 1-2 total stats on turn 8 beat a beginner. The scaled boards keep their
+minion count (each minion at least 1/1) and their real Tavern Tier, which sets the damage. One
+learner against seven library seats gives almost no reward variation: the "bots alone gave no
+signal" problem again.
+
+So the fresh run keeps four learner seats, as full-01 did, and replaces the four bots with
+library seats. The learners compete with each other, so placement varies from the first game,
+while the library seats bring real boards that get stronger as the learners improve.
+Departure: the paper's library stages use one learner and seven library seats, and it names no
+opponents for its first stages.
 
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning

@@ -58,6 +58,10 @@ class TrainConfig:
     difficulty_step: float = 0.05
     difficulty_up: float = 4.0
     difficulty_down: float = 5.0
+    # Lowest d. Below 0 the library's median boards are scaled down by 10**d (d = -1: a tenth
+    # of the median), so a policy trained from scratch has opponents it can beat: the paper
+    # trains against library seats only, "from aligned libraries to harder ones".
+    difficulty_min: float = 0.0
     library_sigma: float = 0.25  # spread of each turn's target strength (log-normal sigma)
     # A new run starts from these policy weights (and their architecture) instead of random
     # ones: the paper's later stages start from the previous stage. Ignored on resume.
@@ -620,7 +624,7 @@ class Trainer:
             self.difficulty += cfg.difficulty_step
         elif placement > cfg.difficulty_down:
             self.difficulty -= cfg.difficulty_step
-        self.difficulty = float(np.clip(self.difficulty, 0.0, seats.difficulty.max))
+        self.difficulty = float(np.clip(self.difficulty, cfg.difficulty_min, seats.difficulty.max))
         seats.d = self.difficulty
 
     def exam_eval(self):

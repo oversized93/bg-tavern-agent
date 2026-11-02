@@ -531,3 +531,12 @@ def test_anchor_kl():
     s = ppo_update(net, opt, b, cfg, torch.device("cpu"), anchor=other, anchor_coef=0.1)
     assert s["anchor_kl"] > 1e-4 and np.isfinite(s["anchor_kl"])
     assert all(torch.isfinite(p).all() for p in net.parameters())
+
+
+def test_difficulty_below_zero_scales_the_median():
+    from bgagent.library import Difficulty
+
+    lad = Difficulty([{8: 200.0}, {8: 1000.0}])
+    assert lad.target(0.0, 8) == 200.0 and lad.target(1.0, 8) == 1000.0
+    assert abs(lad.target(-1.0, 8) - 20.0) < 1e-9 and abs(lad.target(-2.0, 8) - 2.0) < 1e-9
+    assert lad.target(0.5, 8) > lad.target(0.0, 8) > lad.target(-0.5, 8) > lad.target(-1.0, 8)

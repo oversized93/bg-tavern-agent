@@ -181,6 +181,11 @@ class Difficulty:
         return curve[min(turns, key=lambda x: (abs(x - turn), -x))]
 
     def target(self, d, turn):
+        """Target strength at difficulty d. Below 0 the first curve (the library's median) is
+        scaled down by 10**d: d = -1 is a tenth of the median, the easy end for a policy
+        trained from scratch (the paper's "aligned libraries" are our reading)."""
+        if d < 0:
+            return self.target(0.0, turn) * float(10.0 ** d)
         d = float(np.clip(d, 0, self.max))
         lo = int(np.floor(d))
         hi = min(lo + 1, self.max)
