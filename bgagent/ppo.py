@@ -72,6 +72,15 @@ class TrainConfig:
     # Reward shaping: subtracted from the reward of every minion Move. Moves are free in the
     # game, so an untrained policy shuffles minions dozens of times a turn; 0 disables it.
     move_cost: float = 0.0
+    # The end-of-game reward for places 1..8; () = TavernGym's linear one (1st = 1 ... 8th =
+    # -1). The paper names a "first-place goal" stage (Table 6, TA-3) but gives no numbers
+    # (NOTES.md, 2026-11-02).
+    placement_utility: tuple = ()
+    # KL anchor (the paper's Table 7: 0.1 for the first 100 iterations of each stage): adds
+    # anchor_coef * KL(policy || the stage's starting policy) to the loss for the first
+    # anchor_iters iterations. The starting policy is `init_from`, so it needs one.
+    anchor_coef: float = 0.0
+    anchor_iters: int = 100
     torch_threads: int = 0  # CPU threads for torch; 0 = torch's default
     factored: bool = True  # factored action head (see ModelConfig.factored)
     move_cap: int = 6  # action filter (see filters.py): minion moves allowed per turn, 0 = off
@@ -277,6 +286,7 @@ class Collector:
                 if dones[i]:
                     place = int(info["placement"][i])
                     if traj and place > 0:
+                        traj[-1][6] += utility_adjustment(place, cfg.placement_utility)
                         done_trajs.append((traj, place))
                         n_dec += len(traj)
                         self.placements.append(place)
@@ -293,6 +303,18 @@ class Collector:
 
 
 F_HEALTH, F_ARMOR, F_HERO_SELECT = 5, 6, 1  # global floats: health / 40, armor / 20
+
+
+def linear_reward(place, n=8):
+    """TavernGym's placement reward (env.rs `placement_reward`): 1st = 1, last = -1."""
+    return 1.0 - 2.0 * (place - 1) / (n - 1)
+
+
+def utility_adjustment(place, utility):
+    """What to add to TavernGym's end reward so that it becomes `utility[place - 1]`."""
+    if not utility:
+        return 0.0
+    return float(utility[place - 1]) - linear_reward(place, len(utility))
 
 
 def combat_labels(f, place):
@@ -353,12 +375,15 @@ def build_batch(trajs, gamma, lam):
     }
 
 
-def ppo_update(model, opt, batch, cfg: TrainConfig, device):
+def ppo_update(model, opt, batch, cfg: TrainConfig, device, anchor=None, anchor_coef=0.0):
+    """One PPO update. With `anchor` (a frozen model) and anchor_coef > 0, the loss also has
+    anchor_coef * KL(policy || anchor) over the legal actions."""
     amp = device.type == "cuda"
     n = len(batch["act"])
     T = {k: torch.from_numpy(v) for k, v in batch.items()}
     stats = {"pg": 0.0, "vf": 0.0, "ent": 0.0, "aux": 0.0, "combat": 0.0, "kl": 0.0,
-             "clipfrac": 0.0}
+             "clipfrac": 0.0, "anchor_kl": 0.0}
+    use_anchor = anchor is not None and anchor_coef > 0
     use_combat = cfg.combat_coef > 0
     steps, skipped, stop = 0, 0, False
     for _ in range(cfg.epochs):
@@ -397,13 +422,23 @@ def ppo_update(model, opt, batch, cfg: TrainConfig, device):
                     dmg_l = Fn.smooth_l1_loss(c[:, 1], g("dmg") / 10, reduction="none")
                     combat = ((lost_l + dmg_l) * cw).sum() / cw.sum().clamp(min=1)
                     loss = loss + cfg.combat_coef * combat
+                anchor_kl = torch.zeros((), device=device)
+                if use_anchor:
+                    with torch.no_grad(), torch.autocast(device.type, dtype=torch.bfloat16,
+                                                         enabled=amp):
+                        a_logits = anchor(g("feats", torch.float32), g("cards"), g("mask"))[0]
+                    a_logp = torch.log_softmax(a_logits.float(), -1)
+                    # illegal actions: p = 0 and both log-probs -inf; mask them, not 0 * nan
+                    diff = (logp_all - a_logp).masked_fill(~g("mask"), 0.0)
+                    anchor_kl = (p * diff).sum(-1).mean()
+                    loss = loss + anchor_coef * anchor_kl
                 (loss * w).backward()
                 with torch.no_grad():
                     kl = ((ratio - 1) - torch.log(ratio)).mean()  # k3 estimator
                     mb_stats["kl"] += kl.item() * w
                     mb_stats["clipfrac"] += ((ratio - 1).abs() > cfg.clip).float().mean().item() * w
                 for k, val in (("pg", pg), ("vf", vf), ("ent", ent), ("aux", aux),
-                               ("combat", combat)):
+                               ("combat", combat), ("anchor_kl", anchor_kl)):
                     mb_stats[k] += val.item() * w
             norm = torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.max_grad_norm)
             if not torch.isfinite(norm):  # one bad minibatch must not make every weight NaN
@@ -466,6 +501,23 @@ class Trainer:
         if init is not None:
             self.model.load_state_dict(init["model"])
             print(f"initialized from {cfg.init_from} (its iteration {init.get('iteration')})")
+        if cfg.placement_utility and len(cfg.placement_utility) != 8:
+            raise ValueError(f"placement_utility needs 8 values (places 1..8), got "
+                             f"{cfg.placement_utility}")
+        self.anchor = None
+        if cfg.anchor_coef > 0:
+            if not cfg.init_from:
+                raise ValueError("anchor_coef > 0 needs init_from: the anchor is the stage's "
+                                 "starting policy")
+            from .policy import model_config_from
+
+            a = torch.load(cfg.init_from, map_location="cpu", weights_only=False)
+            acfg = model_config_from(a)
+            acfg.move_cap, acfg.no_refreeze, acfg.cancel_cap = mcfg.move_cap, mcfg.no_refreeze, \
+                mcfg.cancel_cap
+            self.anchor = TavernNet(acfg).to(self.device).eval()
+            self.anchor.load_state_dict(a["model"])
+            self.anchor.requires_grad_(False)
         self.opt = torch.optim.AdamW(self.model.parameters(), lr=cfg.lr, weight_decay=0.0,
                                      eps=1e-5)
         self.it = 0
@@ -605,7 +657,8 @@ class Trainer:
             batch = build_batch(trajs, cfg.gamma, cfg.lam)
             self.model.train()
             t1 = time.time()
-            up = ppo_update(self.model, self.opt, batch, cfg, self.device)
+            coef = cfg.anchor_coef if self.it < cfg.anchor_iters else 0.0
+            up = ppo_update(self.model, self.opt, batch, cfg, self.device, self.anchor, coef)
             t_upd = time.time() - t1
             self.it += 1
             c = self.collector

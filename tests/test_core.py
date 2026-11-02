@@ -497,3 +497,37 @@ def test_advisor_on_saved_state(tmp_path):
     assert advice["ready"] and len(advice["actions"]) == 3
     assert all(mask[0, a["action"]] for a in advice["actions"])
     assert 1 <= advice["expected_placement"] <= 8
+
+
+def test_placement_utility():
+    from bgagent.ppo import linear_reward, utility_adjustment
+
+    assert linear_reward(1) == 1.0 and linear_reward(8) == -1.0
+    assert all(utility_adjustment(p, ()) == 0.0 for p in range(1, 9))
+    u = (3.0, 1.0, 0.5, 0.0, -0.25, -0.5, -0.75, -1.0)
+    for p in range(1, 9):
+        assert abs(linear_reward(p) + utility_adjustment(p, u) - u[p - 1]) < 1e-9
+
+
+def test_anchor_kl():
+    import copy
+
+    from bgagent.ppo import TrainConfig, build_batch, ppo_update
+
+    cfg = TrainConfig(model="tiny", minibatch=16, micro_batch=8)
+    torch.manual_seed(0)
+    net = TavernNet(ModelConfig(d=64, layers=2, heads=4))
+    o = next(iter(random_observations(1)))
+    mk = np.packbits(o["action_mask"][0])
+    traj = [[o["features"][0].astype(np.float16), o["cards"][0].astype(np.int16), mk, 0, -1.0,
+             0.0, 0.0] for _ in range(16)]
+    b = build_batch([(traj, 4)], 1.0, 0.995)
+    same = copy.deepcopy(net).eval()
+    opt = torch.optim.AdamW(net.parameters(), lr=0.0)  # lr 0: weights stay equal to the anchor
+    s = ppo_update(net, opt, b, cfg, torch.device("cpu"), anchor=same, anchor_coef=0.1)
+    assert abs(s["anchor_kl"]) < 1e-5
+    other = TavernNet(ModelConfig(d=64, layers=2, heads=4)).eval()  # different weights
+    opt = torch.optim.AdamW(net.parameters(), lr=1e-3)
+    s = ppo_update(net, opt, b, cfg, torch.device("cpu"), anchor=other, anchor_coef=0.1)
+    assert s["anchor_kl"] > 1e-4 and np.isfinite(s["anchor_kl"])
+    assert all(torch.isfinite(p).all() for p in net.parameters())

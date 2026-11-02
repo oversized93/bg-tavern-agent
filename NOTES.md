@@ -773,6 +773,28 @@ Table 7 (final stage, TA-23) against our config:
     hand, magnetic Deathrattles are missing). Scaling their stats to the target only partly
     offsets it. Not measured yet. Measurable on the simulated library by stripping its hands and
     counters and comparing combat win rates.
+  - **Measured (same day):** simulated-library entries (data/library/train, which have hands,
+    counters, attached cards and gained effects) rebuilt exactly as real entries are
+    (EntryBuilder: card, stats, golden, keywords). Pairs matched within 10% of total stats (as
+    library seats are matched to a target), 200 pairs per turn, 64 reseeded combats each.
+    Combat win rate (+ half ties) of A against B, as it is vs rebuilt:
+
+    | turn | 6 | 8 | 10 | 12 | 14 |
+    |---|---|---|---|---|---|
+    | as it is | 0.494 | 0.538 | 0.532 | 0.516 | 0.495 |
+    | rebuilt | 0.479 | 0.533 | 0.523 | 0.510 | 0.471 |
+    | difference | +0.015 ±0.012 | +0.005 ±0.007 | +0.009 ±0.013 | +0.006 ±0.010 | +0.024 ±0.015 |
+
+    Rebuilding costs 0.5-2.4 points of combat win rate: too small to explain lib-02's Tier 1
+    play. Caveat: these boards come from our policies and the bots, which may lean on counters
+    less than real players do (e.g. Undead builds). First try paired random boards; they were
+    so lopsided that every combat went one way (difference 0.000 everywhere), so pairs are now
+    matched. Script: scratchpad measure_strip.py.
+
+**Options added (2026-11-02), off by default:** `placement_utility` (the end reward for
+places 1..8; () = linear) and `anchor_coef` / `anchor_iters` (the paper's KL anchor to
+`init_from`). Tests: `test_placement_utility`, `test_anchor_kl`. Smoke run with both on: the
+anchor KL is logged (0.00018, 0.00174), then 0 after `anchor_iters`.
 
 For us: our hyperparameters are the paper's except volume, lr and the KL anchor. Volume is a
 gap of days to months on this PC, not years (one paper stage ~3 days, see the correction above).
