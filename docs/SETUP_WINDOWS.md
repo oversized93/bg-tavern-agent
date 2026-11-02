@@ -37,6 +37,11 @@ scripts\start_3070.cmd                                          # or double-clic
   `runs\full-01.log`. It refuses to start a second copy of a run that's already training.
 - Close that window to stop. Run `start_3070.cmd` again to resume from the last checkpoint
   (written every 5 iterations).
+- Another run: `-Run runs\<name>`, and a new run's config as trailing `KEY=VALUE` words. The
+  library-opponent run (resume it with just `start_3070.cmd -Run runs\lib-01 -Iterations 300`):
+  ```
+  start_3070.cmd -Run runs\lib-01 -Iterations 300 opponents=library library_path=data/library/train.jsonl.gz exam_path=data/library/exam.jsonl.gz "learner_seats=(0,)" init_from=runs/full-01/policy_00500.pt n_games=256 lr=2e-4
+  ```
 - Progress: `.venv\Scripts\python.exe scripts\status.py runs\full-01`.
 - The window is started through WMI, so it isn't tied to the terminal (or Claude Code
   session) that launched it.

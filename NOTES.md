@@ -518,6 +518,12 @@ Speed (full model, 1 learner per game, 3070), decisions/s in the rollout:
   slots), GPU ~9 s. Python-side floor is ~60 s per iteration; a `set_board` / observe-ready
   change in TavernGym would be the next step if library training proves itself.
 
+**runs/lib-01 started 2026-11-01 ~19:40**: init_from full-01 it 500, opponents=library,
+learner_seats=(0,), n_games 256, lr 2e-4 -> 1e-4 over 4,000, 300 iterations, exam at d 0/1/5
+(128 games each) next to bots and TavernBench every 10. First iterations: placement 5.17 at
+d = 0 (library boards at their own median beat the learner: they never have an off turn),
+~60 s per iteration (39-53 s rollout + 22 s update).
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.

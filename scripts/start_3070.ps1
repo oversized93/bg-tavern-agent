@@ -9,13 +9,16 @@
 # runs\<name>.log. Close that window to stop it; run this again to resume from the last
 # checkpoint. The window is started through WMI so it does not belong to whatever terminal
 # (or Claude Code session) ran this script, and survives it closing.
+[CmdletBinding(PositionalBinding = $false)]  # bare words are config (-Set), never -Run etc.
 param(
     [string]$Run = "runs\full-01",
     # Stop after this many; raise it to extend (start_3070.cmd -Iterations 1000). ~33 s each
     # on a 3070 plus evals: 500 is about 5 hours.
     [int]$Iterations = 500,
     [int]$ScheduleIterations = 4000,  # learning-rate schedule length, independent of stopping
-    # Extra config for a new run, e.g. -Set 'opponents=library','learner_seats=(0,)'
+    # Extra config for a new run as trailing KEY=VALUE words, e.g.
+    #   start_3070.cmd -Run runs\lib-01 opponents=library "learner_seats=(0,)"
+    [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$Set = @()
 )
 $ErrorActionPreference = "Stop"
@@ -34,8 +37,12 @@ if ($running) {
 
 $mbFile = Join-Path $Repo "runs\.micro_batch"
 $mb = if (Test-Path $mbFile) { (Get-Content $mbFile -Raw).Trim() } else { "512" }
+$extra = $Set | ForEach-Object { $_ -split "','" } | ForEach-Object { $_.Trim().Trim("'", '"', ',') } |
+    Where-Object { $_ }
+$bad = $extra | Where-Object { $_ -notmatch '^[a-z_0-9]+=' }
+if ($bad) { throw "Not KEY=VALUE: $($bad -join ' ')" }
 $items = @("bench_dir=$Bench", "micro_batch=$mb", "device=cuda", "iterations=$Iterations",
-           "lr_schedule_iters=$ScheduleIterations") + $Set
+           "lr_schedule_iters=$ScheduleIterations") + $extra
 # each value single-quoted, so tuples like (0,) reach train.py as text
 $set = ($items | ForEach-Object { "'" + ($_ -replace "'", "''") + "'" }) -join ' '
 $log = Join-Path $Repo "$Run.log"
