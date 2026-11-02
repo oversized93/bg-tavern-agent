@@ -877,6 +877,29 @@ place stays at ~1%. That is survival: under the linear placement reward, 6th -> 
 same as 2nd -> 1st. The paper ran a stage with "a first-place goal"; to research before any
 change.
 
+## 2026-11-02: lib-03, a first-place stage (the paper's TA-3)
+
+Why: lib-02 survives better than lib-01 but wins 2-3% on the real exam and stays on Tier 1 to
+turn 8. Under the linear reward a place is a place, and at d = 0 survival was enough. The paper
+ran "a first-place goal against opponents fitted to human statistics" (Table 6, TA-3) before
+its library stages; our chain never had one. Cranny approved ("Alright start l3").
+
+**runs/lib-03 started 2026-11-02 ~10:08** (first iteration logged 10:09:51): init_from lib-02
+it 275, library real-train, exam real-exam (d 0/1/5, 256 games). Three settings change against
+lib-02:
+- `difficulty=1.0`, `difficulty_down=8.0` (never easier), `difficulty_up=4.5`: Firestone's
+  all-players curve is our reading of "opponents fitted to human statistics".
+- `placement_utility=(3, 0.714, 0.429, 0.143, -0.143, -0.429, -0.714, -1)`: 1st is worth 3
+  instead of 1, the rest linear as before, so 2nd -> 1st (+2.29) is worth more than 8th -> 2nd
+  (+1.71). The paper gives no numbers; 3 is ours.
+- `anchor_coef=0.1`, `anchor_iters=100` (the paper's Table 7).
+Unchanged: lr 2e-4, ~66k decisions per iteration, 256 games, 300 iterations. First
+iterations: placement 5.66 / 5.58 at d = 1 (opponent turn 8 ~236), tier at turn 8 1.06 / 1.07,
+anchor KL 0.003-0.006, ~70 s per iteration (update 29 s with the anchor, was 22-23 s).
+Success: the tier at turn 8 above 2 and first place on the real exam above 3%, with nothing
+else falling. If the tier hasn't moved by it 100, the reward alone isn't the lever; next is
+the paper-scale run (~1M decisions per iteration, lower lr, ~3 days per stage).
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
