@@ -768,6 +768,22 @@ levelling. Untested guess: small batches at a high lr commit early. The real pac
 evals is 1.31 min per iteration (the ~60 s above leaves the evals out), so the run ends about
 09:50, not the 08:20 I told Cranny.
 
+Check-in at it 249 (08:44): tier by turn (means over the iteration ranges):
+
+| iterations | t4 | t6 | t8 | t10 | training placement | top-1 | top-4 |
+|---|---|---|---|---|---|---|---|
+| 1-20 | 1.00 | 1.88 | 2.01 | 2.03 | 5.50 | 0.007 | 0.25 |
+| 161-180 | 1.00 | 1.39 | 1.92 | 2.00 | 5.31 | 0.006 | 0.29 |
+| 201-220 | 1.00 | 1.04 | 1.32 | 2.00 | 5.28 | 0.007 | 0.31 |
+| 230-249 | 1.00 | 1.02 | 1.16 | 1.98 | 5.21 | 0.009 | 0.31 |
+
+Exam (it 10 -> 240): d0 5.55 -> 5.41 (top-4 0.22 -> 0.28), d1 5.86 -> 5.57 (0.16 -> 0.25), d5
+6.74 -> 6.48 (0.04 -> 0.09). It now stays on Tier 1 until about turn 9 (real winners: 4.7 at turn 8),
+spends all its gold on minions, and places better against real boards and the exam, but first
+place stays at ~1%. That is survival: under the linear placement reward, 6th -> 5th is worth the
+same as 2nd -> 1st. The paper ran a stage with "a first-place goal"; to research before any
+change.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
