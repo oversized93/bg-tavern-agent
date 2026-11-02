@@ -791,6 +791,29 @@ Table 7 (final stage, TA-23) against our config:
     so lopsided that every combat went one way (difference 0.000 everywhere), so pairs are now
     matched. Script: scratchpad measure_strip.py.
 
+**lib-02 stopped at it 275 (Cranny: "End lib 2 and let's move forward"), 09:23, right after
+the it-275 checkpoint; policy_00275.pt written from latest.pt.** Review (scratchpad
+review_lib02.txt), against lib-01 it 300:
+
+| | lib-01 it 300 | lib-02 it 275 |
+|---|---|---|
+| greedy vs bots, 1000 games | 2.20 ±0.08 | 2.19 ±0.07 (top-1 0.35) |
+| among seven full-01 it500s, 512 games | 3.41 ±0.19 | **3.13 ±0.17** (top-1 0.24) |
+| among seven lib-01 it300s, 512 games | (4.5 = even) | **4.20 ±0.20** (top-1 0.15) |
+| real exam d0, same 512 games | 5.54 ±0.13 (top-4 0.26) | **5.17 ±0.13** (0.36) |
+| real exam d1 | 5.79 ±0.13 (0.19) | **5.47 ±0.14** (0.26) |
+| real exam d5 | 6.71 ±0.10 (0.03) | **6.42 ±0.11** (0.08) |
+| first place on the real exam d0 / d1 | 0.01 / 0.02 | 0.02 / 0.03 |
+| tier vs bots, turns 8 / 10 / 12 | 2.02 / 2.02 / 2.10 | 1.12 / 1.94 / 2.00 |
+| warband stats vs bots, turns 10 / 12 | 479 / 743 | 472 / 696 |
+| TavernBench lookahead / policy | 0.85 / 0.30 | 0.85 / 0.29 |
+| long-term (D1 D2 D4 N1 N2) | 0.35 (0.50 0.38 0.44 0.24 0.19) | 0.34 (0.50 0.25 0.44 0.31 0.22) |
+
+Better than lib-01 on every head-to-head and real-exam measure, while staying on Tier 1
+longer and almost never winning (2-3% first place on the exam). Its ladder never moved off d =
+0 (it needs placement < 4.5; it sat at ~5.2): it trained only against median real boards (t8
+~191, t10 ~851; the Perfect Games winners have 282 / 1,806).
+
 **Options added (2026-11-02), off by default:** `placement_utility` (the end reward for
 places 1..8; () = linear) and `anchor_coef` / `anchor_iters` (the paper's KL anchor to
 `init_from`). Tests: `test_placement_utility`, `test_anchor_kl`. Smoke run with both on: the
