@@ -266,6 +266,8 @@ class Collector:
                 self.filter.record(op_idx, a)
                 actions[op_idx] = a
             rewards, dones, info = env.step(actions)
+            if self.library_seats is not None:
+                self.library_seats.end_finished(dones)
             self.rejected += int((info["rejected"] & self.learner).sum())
             hit = np.nonzero(((rewards != 0) | dones) & self.learner)[0]
             for i in hit:

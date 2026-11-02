@@ -417,6 +417,39 @@ def test_library_seat_with_huge_board_wins():
     assert all(abs(given - 7000) <= 7 for rows in seats.given.values() for _, given in rows)
 
 
+def test_library_game_restarts_when_learner_is_out():
+    # Library seats are controlled slots, so BatchEnv would play them on against each other
+    # after the learner is eliminated (every turn with a save/load) unless told they're done.
+    from bgagent.library import Difficulty, Library, LibrarySeats
+
+    env = taverngym.BatchEnv(1, seed=5, controlled=tuple(range(8)))
+    o = _random_until(env, 2)
+    g = json.loads(env.save(0))["game"]
+    m = next(m for p in g["players"] for m in p["board"])
+    big = dict(m, atk=500, hp=500, max_hp=500, peak_atk=500, peak_hp=500)
+    lib = Library([{"turn": t, "strength": 7000, "tier": 1, "board": [big] * 7, "hand": [],
+                    "stats": {}, "counters": []} for t in range(1, 40)])
+    seats = LibrarySeats(env, tuple(range(1, 8)), lib, Difficulty([{1: 7000}]), sigma=0.0)
+    rng = np.random.default_rng(1)
+    while True:
+        if seats.prepare(o):
+            o = env.observe()
+        acts = np.zeros(env.n_slots, np.int64)
+        idx = np.nonzero(o["ready"])[0]
+        lib_idx = idx[seats.mask[idx]]
+        acts[lib_idx] = seats.actions(o, lib_idx)
+        for i in idx[~seats.mask[idx]]:
+            acts[i] = rng.choice(np.nonzero(o["action_mask"][i])[0])
+        _, dones, info = env.step(acts)
+        seats.end_finished(dones)
+        o = env.observe()
+        if dones[0]:
+            break
+    assert info["placement"][0] == 8 and env.episode_index(0) == 0
+    env.step(np.zeros(env.n_slots, np.int64))
+    assert env.episode_index(0) == 1
+
+
 def test_library_pick_and_difficulty():
     from bgagent.library import Difficulty, Library
 

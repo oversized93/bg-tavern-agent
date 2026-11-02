@@ -11,6 +11,7 @@ dependencies = [
     "numpy",
     "torch>=2.4",
     "tensorboard",
+    "orjson",  # library opponents parse and rewrite a game state every turn (bgagent/library.py)
     # TavernGym (MIT, MCG-NJU/AutoTavern), pinned to the commit this code was built against.
     # Building it needs a Rust toolchain; see docs/SETUP_WSL2.md.
     "taverngym @ git+https://github.com/MCG-NJU/AutoTavern@fb61201a557ddd36a411cf44aac51ce4d9b606ce",

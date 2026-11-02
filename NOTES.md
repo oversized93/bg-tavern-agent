@@ -500,6 +500,24 @@ silent (it publishes no code or library details), these are our choices:
 Smoke test (tiny fresh model, 3 iterations): opponents got exactly their targets (t8 204/204,
 t12 543/543); a fresh policy places 8.00 against the library, as expected.
 
+Libraries: train = 35,058 entries from 1,000 games (seed 1; seats 0-3 full-01 it 500, 4-5 it
+250, 6-7 bots), 374 s; exam = 27,700 entries from 300 games (seed 2; it 475, it 375, bots).
+Their strongest boards pass the top-1% mean at most turns (train turn 10: 2,681 vs 1,793;
+turn 12: 7,239 vs 5,951), so even d = 5 needs little scaling. Medians track full-01 (turn 10:
+385 train, 344 exam).
+
+Speed (full model, 1 learner per game, 3070), decisions/s in the rollout:
+- first version: 790-940 (rollout 70-86 s; mixed was 5,500-6,000). Profile: `prepare` 17.8 s
+  of 38 s, 200k json decode calls (a per-minion deep copy through JSON), and games played on
+  after the learner was out (library seats are controlled, so BatchEnv only restarts a game
+  when they're done too).
+- shallow minion copies, `end_finished` (marks the library seats done once the learner is
+  out: the game restarts on the next step), orjson: 1,230-1,650 (rollout 41-53 s).
+- What's left per 32k decisions: prepare ~13 s (state save/parse/load ~6 s, entry parse
+  ~2.4 s), observe ~9 s (8 slots per learner instead of 1; only TavernGym can skip unready
+  slots), GPU ~9 s. Python-side floor is ~60 s per iteration; a `set_board` / observe-ready
+  change in TavernGym would be the next step if library training proves itself.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.

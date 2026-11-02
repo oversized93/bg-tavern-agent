@@ -25,6 +25,17 @@ from pathlib import Path
 
 import numpy as np
 
+try:  # a game state is parsed and rewritten every turn; orjson is several times faster
+    import orjson
+
+    def _loads(s):
+        return orjson.loads(s)
+
+    def _dumps(x):
+        return orjson.dumps(x).decode()
+except ImportError:  # pragma: no cover
+    _loads, _dumps = json.loads, json.dumps
+
 # Buff counters that cards read in combat; copied with an entry. Game history (streaks, wins,
 # last damage) stays with the seat that receives it.
 COPY_STATS = (
@@ -56,7 +67,7 @@ def make_entry(player, turn):
 
 
 def _fresh_minion(game, m, scale):
-    m = json.loads(json.dumps(m))  # deep copy
+    m = dict(m)  # shallow: only top-level fields change below, nested lists are never mutated
     game["next_eid"] += 1
     m["eid"] = game["next_eid"]
     m["pool_copies"] = 0  # not from the shared pool: nothing returns to it (engine convention)
@@ -75,15 +86,15 @@ def inject(game, seat, entry, scale=1.0, hand=True):
     if hand:
         items = []
         for it in entry["hand"]:
-            it = json.loads(json.dumps(it))
+            it = dict(it)
             inner = it.get("item", {})
             if "Minion" in inner:
-                inner["Minion"] = _fresh_minion(game, inner["Minion"], 1.0)
+                it["item"] = dict(inner, Minion=_fresh_minion(game, inner["Minion"], 1.0))
             items.append(it)
         p["hand"] = items
     p["tier"] = entry["tier"]
     p["stats"].update(entry["stats"])
-    p["counters"] = json.loads(json.dumps(entry["counters"]))
+    p["counters"] = list(entry["counters"])
 
 
 class Library:
@@ -96,7 +107,7 @@ class Library:
         self._index = None
 
     def add(self, e):
-        self.by_turn[e["turn"]].append((e["strength"], json.dumps(e, separators=(",", ":"))))
+        self.by_turn[e["turn"]].append((e["strength"], _dumps(e)))
         self._index = None
 
     def __len__(self):
@@ -129,7 +140,7 @@ class Library:
         cand = rng.integers(0, len(rows), size=min(k, len(rows)))
         logs = np.log(np.maximum(s[cand], 1.0))
         j = int(cand[np.argmin(np.abs(logs - np.log(max(target, 1.0))))])
-        entry = json.loads(rows[j][1])
+        entry = _loads(rows[j][1])
         strength = rows[j][0]
         scale = 1.0 if strength <= 0 else float(np.clip(target / strength, 1 / max_scale, max_scale))
         return entry, scale
@@ -147,7 +158,7 @@ class Library:
         lib = cls()
         with gzip.open(path, "rt", encoding="utf-8") as f:
             for line in f:
-                e = json.loads(line)
+                e = _loads(line)
                 lib.by_turn[e["turn"]].append((e["strength"], line.rstrip("\n")))
         return lib
 
@@ -215,7 +226,7 @@ class LibrarySeats:
             if self.done.get(int(i)) != key:
                 need[g].append((int(i), seat, turn, key))
         for g, items in need.items():
-            s = json.loads(self.env.save(g))
+            s = _loads(self.env.save(g))
             game = s["game"]
             for i, seat, turn, key in items:
                 if not game["players"][seat]["alive"]:
@@ -226,8 +237,25 @@ class LibrarySeats:
                 inject(game, seat, entry, scale, hand=self.hand)
                 self.done[i] = key
                 self.given[turn].append((target, board_strength(game["players"][seat]["board"])))
-            self.env.load(g, json.dumps(s))
+            self.env.load(g, _dumps(s))
         return bool(need)
+
+    def end_finished(self, dones):
+        """Once every non-library seat of a game has finished, the game is over for us: mark
+        its library seats finished too, so BatchEnv restarts it on the next step instead of
+        playing the library seats on against each other (wasted turns, each with a save/load).
+        Call after each step with its `dones`."""
+        games = {self.env.slot(int(i))[0] for i in np.nonzero(dones & ~self.mask)[0]}
+        if not games:
+            return
+        ctrl = self.env.controlled
+        mine = [j for j, seat in enumerate(ctrl) if not self.mask[j]]  # slot j of game 0
+        for g in games:
+            s = _loads(self.env.save(g))
+            fin = s["finished"]
+            if all(fin[j] for j in mine) and not all(fin):
+                s["finished"] = [True] * len(fin)
+                self.env.load(g, _dumps(s))
 
     def actions(self, o, idx):
         """End Turn where legal, else a random legal action, for slots `idx`."""
@@ -270,7 +298,7 @@ def harvest(env, policy_for_slot, games, act_fn, per_turn_cap=2000, keep_top=400
             if prev is None or prev[0] != key[0] or prev[1] < turn:
                 last_turn[g] = key
                 if prev is not None and prev[0] == key[0] and turn > 1:
-                    game = json.loads(env.save(g))["game"]
+                    game = _loads(env.save(g))["game"]
                     for p in game["players"]:
                         if p["alive"] and p["board"]:
                             _keep(make_entry(p, turn - 1), top, res, seen, rng,

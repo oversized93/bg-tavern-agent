@@ -72,6 +72,8 @@ def evaluate(policy, games, n_parallel=64, threads=4, sample=False, device="cpu"
                                    device, amp, rng)
             f.record(idx, actions[idx])
         _, dones, info = env.step(actions)
+        if seats is not None:
+            seats.end_finished(dones)
         for i in np.nonzero(dones & active & mine)[0]:
             if info["placement"][i] > 0:
                 places.append(int(info["placement"][i]))
