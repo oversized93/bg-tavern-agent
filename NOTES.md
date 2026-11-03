@@ -1189,6 +1189,45 @@ steps carry no policy gradient, so it never practises the choice. And it plays a
 the bootcamp as with it (4.64 vs 4.67): the forced levels neither help nor hurt it here. boot-01
 keeps running meanwhile (it costs nothing and is a second line of evidence).
 
+**Where real winners finish in our lobbies** (Cranny: "what would the perfect games rank in our
+simulation"; scratchpad `replay_rank.py`, 19:45-20:13). Two seats replay real first-place players
+turn by turn: each turn the seat's board and Tier become that winner's real board for that turn
+(boards.jsonl.gz, side "main", built with EntryBuilder, unscaled; no hand, hidden counters, hero
+power or trinkets, like a library seat; one real game per seat per lobby, its last board kept past
+its end). Two seats are scratch-01 policy_00150; four are library seats. Seats swapped halfway;
+800 lobbies (1600 results a side) per line. Winners come from the other half of the train/exam
+split than the library seats' boards. The replayed seats' Tiers match real winners (t4 2.48, t6
+3.64, t8 4.74-4.93).
+
+| Library seats | Real winners: place, won, top 4 | scratch-01: place, won, top 4 |
+|---|---|---|
+| training, d -0.2 | 2.32 ±0.09, 0.44, 0.87 | 4.78 ±0.07, 0.006, 0.46 |
+| exam, d0 | 3.07 ±0.12, 0.38, 0.75 | 5.83 ±0.07, 0.001, 0.19 |
+| exam, d1 | 3.24 ±0.12, 0.39, 0.70 | 6.01 ±0.07, 0.001, 0.17 |
+| exam, d5 | 4.26 ±0.13, 0.29, 0.50 | 6.46 ±0.06, 0.001, 0.08 |
+
+Real winners' places are two-humped: at d0 38% first but 10% eighth; at d5 29% first, 17% eighth.
+
+Board strength (Attack + Health) by turn, medians from the same replays and our targets:
+
+| Turn | 4 | 6 | 8 | 10 | 12 |
+|---|---|---|---|---|---|
+| real winners | 31 | 80 | 226 | 1307 | 6612 |
+| their real opponents | 22 | 59 | 154 | 593 | 2116 |
+| our training opponents (d -0.2) | 17 | 43 | 117 | 517 | 2207 |
+| exam d0 / d5 | 27 / 32 | 71 / 91 | 193 / 328 | 876 / 1793 | 3283 / 5951 |
+
+Readings. (1) Our world does reward a real winner's game, levelling included, by a lot: 2.5-2.8
+places better than our AI in the same lobbies. So it is not true that nothing in our world pays
+for levelling; what boot-01 lacks is the second half, turning high Tiers into boards like these
+(winners double their real opponents by turn 10). (2) Our training opponents are about 75% of
+real opponents from turn 4 to 8 and equal by turns 10-12; d0 is a little above real opponents
+(its median mixes winners' boards in, half of all boards). (3) The eighth places suggest that
+opponents always on the strength curve, never having a weak turn, kill some winners whose real
+early game was weak; real lobbies are more forgiving early. Not measured yet (which winners die,
+and when). Caveats: these winners were picked because they won (luck included), and a replayed
+seat never pays gold or tempo for its board.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
