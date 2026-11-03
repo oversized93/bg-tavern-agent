@@ -1228,6 +1228,38 @@ early game was weak; real lobbies are more forgiving early. Not measured yet (wh
 and when). Caveats: these winners were picked because they won (luck included), and a replayed
 seat never pays gold or tempo for its board.
 
+**With real winners in the lobby, does levelling pay for our AI?** (scratchpad `h2h_replay.py`,
+20:15-20:27.) The it-150 head to head again, with two of the four library seats replaced by
+replayed real winners; 800 lobbies each. Training library d -0.2: boot-01 4.85 ±0.08, scratch-01
+4.80 ±0.08, difference +0.04 ±0.11. Exam d0: 5.59 vs 5.47, +0.12 ±0.12. No: a lobby with real
+late-game boards in it doesn't make our AI's levelling pay either. And with 100 more iterations
+of practice it still hasn't: over it 200-250 boot-01 averages exam d0 6.31 vs scratch-01 6.19 (d1
+6.61 vs 6.54, d5 7.20 vs 7.08), bots 3.09 vs 3.42.
+
+**Why: our AI never learned to scale its board** (scratchpad `strength.py`; 400 lobbies, boot-01
+and scratch-01 policy_00250, two seats each, four library seats at training d -0.2; the board a
+seat fought with, read at its next turn start; alive seats; median Attack + Health):
+
+| Turn | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| boot-01 (Tier) | 19 (2.0) | 40 (2.0) | 58 (3.0) | 91 (3.5) | 131 (4.0) | 161 (5.0) | 229 (5.0) | 280 (6.0) | 376 (6.0) | 561 (6.0) |
+| scratch-01 (Tier) | 25 (1.0) | 46 (1.0) | 75 (1.1) | 105 (1.9) | 128 (2.1) | 154 (2.1) | 211 (2.1) | 271 (2.2) | 377 (2.2) | 636 (2.3) |
+| real winners | 19 | 31 | 50 | 80 | 130 | 226 | 546 | 1307 | 3126 | 6612 |
+| their real opponents | 13 | 22 | 35 | 59 | 93 | 154 | 314 | 593 | 1215 | 2116 |
+| our library seats (d -0.2) | 10 | 17 | 27 | 43 | 69 | 117 | 256 | 517 | 1152 | 2207 |
+
+Up to turn 7 both AIs' boards are as strong as real winners' or stronger (scratch-01 at turn 5:
+75 against 50), and two to three times our library seats'. From turn 8 they barely grow (about
+x1.3 a turn, against x2.2-2.4 for real boards): at turn 10, 280 against real opponents' 593 and
+real winners' 1307. **boot-01's Tier 6 board at turn 10 (280) is no stronger than scratch-01's
+Tier 2 board (271).** So the missing skill is late-game scaling (buff engines, triples, the cards
+that grow every turn), not levelling: without scaling a higher Tier buys nothing, which is why
+scratch-01 learned not to level. And our training lobbies reward the tempo game it found
+instead: at d -0.2 the library seats are pushovers early (27 at turn 5 against its 75), so it wins
+the early fights, banks Health and coasts; the ladder settles where its late weakness balances
+that. Real lobbies punish the same plan (real slow levellers place ~7th). The bootcamp can't
+supply the missing skill; next is research on teaching scaling. boot-01 keeps running for now.
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
