@@ -1165,6 +1165,30 @@ the bots 0.33-0.54 places against library seats, so the AI is already earning ba
 levelling costs there. Entropy is higher (1.58 vs 1.39): its own choices are less settled. Not
 the decision yet: that is at it 150 head to head.
 
+**The it-150 decision test** (scratchpad `h2h.py`, 2026-11-02 18:50-19:05). Same lobbies: boot-01
+policy_00150 in two seats, scratch-01 policy_00150 in two, four library seats; seats swapped
+halfway; 800 lobbies (1600 results a side) per line; both sample, as in training. Lobbies end when
+the four tested seats are out (LibrarySeats.end_finished), so only they report places.
+
+| Lobby | boot-01 | scratch-01 | boot minus scratch | Tier t4 / t6 / t8, boot vs scratch |
+|---|---|---|---|---|
+| training library, d -0.2, boot on the bootcamp | 4.67 ±0.09 | 4.75 ±0.08 | -0.09 ±0.12 | 2.00 / 3.56 / 4.97 vs 1.40 / 2.21 / 2.91 |
+| exam library, d0, boot on the bootcamp | 5.73 ±0.08 | 5.58 ±0.08 | +0.14 ±0.11 | 2.00 / 3.53 / 4.96 vs 1.39 / 2.20 / 2.91 |
+| training library, d -0.2, boot WITHOUT it | 4.64 ±0.08 | 4.71 ±0.09 | -0.07 ±0.12 | 1.02 / 1.72 / 2.01 vs 1.40 / 2.23 / 2.91 |
+
+The logs agree (exam d0 6.41 both at it 150; bots 3.16 vs 3.63, the one place boot-01 is ahead).
+By the rule set before the run, boot-01 is not ahead: a tie in training lobbies, slightly behind
+on the exam boards. After 150 iterations of practice on Tiers 4-6, levelling on the winners'
+schedule still does not pay in our training world, while in real lobbies the AI's curve goes
+with 7th place (above). So the library seats, not a local optimum, are what make slow levelling
+safe: the next step is the opponents (research first).
+
+Also: left to itself boot-01 levels even less than scratch-01 (t8 2.01). Expected: with
+`level_force=1.0` every time it is behind, the Upgrade is forced before it can choose, and forced
+steps carry no policy gradient, so it never practises the choice. And it plays as well without
+the bootcamp as with it (4.64 vs 4.67): the forced levels neither help nor hurt it here. boot-01
+keeps running meanwhile (it costs nothing and is a second line of evidence).
+
 ## Open questions
 - Learning rate and entropy for the full model: the paper's 6e-6 is for late fine-tuning
   stages; early stages need far higher. Tune on the small preset first.
